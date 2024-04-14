@@ -31,3 +31,7 @@ import pybullet as p
 print(pb.__version__)
 
 ```
+## Pybullet ROS2 Integration
+ - Here we are using ROS2 since it has better dependenceies and the launch files in ROS2 provide more flexibility which can be very useful for the VSR 2.0
+
+ For detailed info on the integration and the structure. Look [docs/VSR2_structure.md](docs/VSR2_structure.md)
