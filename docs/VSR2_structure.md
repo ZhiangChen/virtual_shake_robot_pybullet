@@ -1,8 +1,8 @@
 # PyBullet ROS2 Architecture Overview
 
-![Structure_Diagram](/docs/akshay_1.jpg)
 
-This project implements a sophisticated robotics simulation framework using PyBullet and ROS2. The architecture is divided into three main nodes: Control, Perception, and Simulation, each with specific responsibilities. Additionally, it uses various configuration files to manage simulation parameters and robot specifications.
+
+This project implements a robotics simulation framework using PyBullet and ROS2. The architecture is divided into three main nodes: Control, Perception, and Simulation, each with specific responsibilities. Additionally, it uses various configuration files to manage simulation parameters and robot specifications.
 
 ## Control Node
 
@@ -15,7 +15,7 @@ This project implements a sophisticated robotics simulation framework using PyBu
 
 - Listens for and subscribes to data topics published by the Simulation Node, focusing on the dynamic state of the simulation environment.
 - Processes and analyzes simulation state data, potentially enhancing and republishing this information for use in detailed analysis or advanced visualization.
-- Records experimental data, such as the status of Physical-Based Rendering (PBR) and the trajectory followed during the simulation.
+- Records experimental data, such as the status of Precariously Balanced Rock (PBR) and the trajectory followed during the simulation.
 
 ## Simulation Node
 
@@ -33,8 +33,8 @@ This project implements a sophisticated robotics simulation framework using PyBu
 
 ## Configuration Files
 
-- **Physics and PyBullet Parameters Configuration Files**: Separate files for physics parameters (`changedynamics`) and PyBullet specific parameters (`setPhysicsEngineParameter`).
-- **VSR Structure Configuration File**: Specifies the VSR (Variable Stiffness Robot) structure, including geometric dimensions, mass distribution, inertia properties, and mesh file paths.
-- **Simulation Configuration File**: Contains parameters for the simulation setup, including physical properties (mass, friction, restitution), PyBullet environment configurations, PID controller settings, and specific robot model parameters.
+- **Physics Parameter Files**: This file will contain the physics parameters managed by (`changeDynamics`), such as the coefficient of restitution and friction.
+- **VSR Structure Parameter File**: Specifies the VSR (Virtual Shake Robot) structure, including geometric dimensions, mass distribution, inertia properties, and mesh file paths.
+- **Simulation Parameter File**: This file will contain  the parameters that will control the Physics Engine Settings, through (`setPhysicsEngineParameter`).
 
 This architecture facilitates detailed simulation and analysis of robotic systems, leveraging the power of ROS2 and PyBullet for comprehensive, realistic modeling.
