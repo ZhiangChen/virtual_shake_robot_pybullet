@@ -1,1 +1,1 @@
-/home/akshay/install/my_robot_controller:/home/akshay/virtual_shake_robot_pybullet/install/virtual_shake_robot_pybullet:/opt/ros/humble
+/home/akshay/ros2_ws/install/virtual_shake_robot_pybullet:/home/akshay/install/my_robot_controller:/opt/ros/humble

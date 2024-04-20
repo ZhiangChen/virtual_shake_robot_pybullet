@@ -1,5 +1,11 @@
-
 dynamics:
+  world_box:
+    restitution: 0.9
+    lateralFriction: 0.6
+    spinningFriction: 0.5
+    rollingFriction: 0.6
+    contactDamping: -1
+    contactStiffness: -1
   box:
     restitution: 0.9
     lateralFriction: 0.6
