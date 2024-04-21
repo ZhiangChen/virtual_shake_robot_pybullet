@@ -1,8 +1,0 @@
-{
-    "python.pythonPath": "/opt/ros/humble/bin/python3",
-    "terminal.integrated.env.linux": {
-      "PYTHONPATH": "/opt/ros/humble/lib/python3/dist-packages"
-    },
-    "ros.distro": "humble"
-  }
-  
