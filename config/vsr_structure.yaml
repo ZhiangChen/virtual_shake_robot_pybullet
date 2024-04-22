@@ -1,16 +1,18 @@
-structure:
-  world_box:
-    dimensions: [50, 14, 2]
-    mass: 5000000
-    inertia: [83333333, 1043333333, 1123333333]
-    mesh: "path_to_mesh/world_box.obj"
-  slide_box:
-    dimensions: [50, 12, 0.5]
-    mass: 500000
-    inertia: [6010416, 104177083, 110166666]
-    mesh: "path_to_mesh/slide_box.obj"
-  box:
-    dimensions: [10, 10, 0.1]
-    mass: 10000
-    inertia: [83541, 83541, 166666]
-    mesh: "path_to_mesh/box.obj"
+simulation_node:
+  ros__parameters:
+    structure:
+      world_box:
+        dimensions: [50.0, 14.0, 2.0]  
+        mass: 5000000.0
+        inertia: [83333333.0, 1043333333.0, 1123333333.0]  
+        mesh: "path_to_mesh/world_box.obj"
+      slide_box:
+        dimensions: [50.0, 12.0, 0.5]  
+        mass: 500000.0
+        inertia: [6010416.0, 104177083.0, 110166666.0]  
+        mesh: "path_to_mesh/slide_box.obj"
+      box:
+        dimensions: [10.0, 10.0, 0.1]  
+        mass: 10000.0
+        inertia: [83541.0, 83541.0, 166666.0]  
+        mesh: "path_to_mesh/box.obj"
