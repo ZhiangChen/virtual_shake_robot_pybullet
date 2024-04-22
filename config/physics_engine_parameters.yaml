@@ -1,11 +1,11 @@
-engineSettings:
-  gravity: [0, 0, -9.81]
-  timeStep: 0.001
-  numSolverIterations: 150
-  useSplitImpulse: true
-  splitImpulsePenetrationThreshold: -0.04
-  enableConeFriction: true
-  deterministicOverlappingPairs: 1
-
-
+simulation_node:
+  ros__parameters:
+    engineSettings:
+      gravity: [0.0, 0.0, -9.81]  
+      timeStep: 0.001
+      numSolverIterations: 150
+      useSplitImpulse: true
+      splitImpulsePenetrationThreshold: -0.04
+      enableConeFriction: true
+      deterministicOverlappingPairs: 1
 

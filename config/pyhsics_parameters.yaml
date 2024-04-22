@@ -1,16 +1,24 @@
-
-dynamics:
-  box:
-    restitution: 0.9
-    lateralFriction: 0.6
-    spinningFriction: 0.5
-    rollingFriction: 0.6
-    contactDamping: -1
-    contactStiffness: -1
-  slide_box:
-    restitution: 0.5
-    lateralFriction: 0.5
-    spinningFriction: 0.3
-    rollingFriction: 0.3
-    contactDamping: -1
-    contactStiffness: -1
+simulation_node:
+  ros__parameters:
+    dynamics:
+      world_box:
+        restitution: 0.9
+        lateralFriction: 0.6
+        spinningFriction: 0.5
+        rollingFriction: 0.6
+        contactDamping: -1.0
+        contactStiffness: -1.0
+      box:
+        restitution: 0.9
+        lateralFriction: 0.6
+        spinningFriction: 0.5
+        rollingFriction: 0.6
+        contactDamping: -1.0
+        contactStiffness: -1.0
+      slide_box:
+        restitution: 0.5
+        lateralFriction: 0.5
+        spinningFriction: 0.3
+        rollingFriction: 0.3
+        contactDamping: -1.0
+        contactStiffness: -1.0

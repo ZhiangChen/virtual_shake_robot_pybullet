@@ -1,8 +1,0 @@
-source;share/virtual_shake_robot_pybullet/hook/cmake_prefix_path.ps1
-source;share/virtual_shake_robot_pybullet/hook/cmake_prefix_path.dsv
-source;share/virtual_shake_robot_pybullet/hook/cmake_prefix_path.sh
-source;share/virtual_shake_robot_pybullet/local_setup.bash
-source;share/virtual_shake_robot_pybullet/local_setup.dsv
-source;share/virtual_shake_robot_pybullet/local_setup.ps1
-source;share/virtual_shake_robot_pybullet/local_setup.sh
-source;share/virtual_shake_robot_pybullet/local_setup.zsh
