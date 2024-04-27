@@ -15,10 +15,5 @@ simulation_node:
         rollingFriction: 0.6
         contactDamping: -1.0
         contactStiffness: -1.0
-      slide_box:
-        restitution: 0.5
-        lateralFriction: 0.5
-        spinningFriction: 0.3
-        rollingFriction: 0.3
-        contactDamping: -1.0
-        contactStiffness: -1.0
+      
+      

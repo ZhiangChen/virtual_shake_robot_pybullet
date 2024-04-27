@@ -42,6 +42,7 @@ class SimulationNode(Node):
                 ('structure.pedestal.inertia', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('structure.pedestal.dimensions', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('structure.pedestal.mesh', rclpy.Parameter.Type.STRING),
+                ('structure.pedestal.meshScale', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('structure.world_box.mass', rclpy.Parameter.Type.DOUBLE),
                 ('structure.world_box.inertia', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('structure.world_box.dimensions', rclpy.Parameter.Type.DOUBLE_ARRAY)
@@ -83,7 +84,8 @@ class SimulationNode(Node):
             'pedestal': {
                 'mass': self.get_parameter('structure.pedestal.mass').value,
                 'inertia': self.get_parameter('structure.pedestal.inertia').value,
-                'dimensions': self.get_parameter('structure.pedestal.dimensions').value
+                'dimensions': self.get_parameter('structure.pedestal.dimensions').value,
+                'meshScale': self.get_parameter('structure.pedestal.meshScale').value
             },
             
             
@@ -144,36 +146,61 @@ class SimulationNode(Node):
     
     def create_robot(self, client_id):
             
+        
         """Create the robot using dynamics and structure settings with joints, using a mesh for the pedestal."""
         p.loadURDF("plane.urdf", physicsClientId=client_id)
 
         # Create the collision and visual shapes for world_box and pedestal
-        shapes = {}
-        for link_name, link_config in self.structure_config.items():
-            shapes[link_name] = {
-                'collision': p.createCollisionShape(p.GEOM_BOX, halfExtents=[x / 2 for x in link_config['dimensions']]),
-                'visual': p.createVisualShape(p.GEOM_BOX, halfExtents=[x / 2 for x in link_config['dimensions']])
-            }
+        world_box_shape = {
+            'collision': p.createCollisionShape(p.GEOM_BOX, halfExtents=[x / 2 for x in self.structure_config['world_box']['dimensions']]),
+            'visual': p.createVisualShape(p.GEOM_BOX, halfExtents=[x / 2 for x in self.structure_config['world_box']['dimensions']])
+        }
 
         # Fetch the mesh path for the pedestal from ROS2 parameters
         pedestal_mesh_path = self.get_parameter('structure.pedestal.mesh').get_parameter_value().string_value
 
+        self.get_logger().info(f"Using meshScale: {self.structure_config['pedestal']['meshScale']}")
+    
         # Load the mesh for the pedestal
-        shapes['pedestal'] = {
-            'collision': p.createCollisionShape(shapeType=p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=[0.5, 0.5, 0.5]),
-            'visual': p.createVisualShape(shapeType=p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=[0.5, 0.5, 0.5])
+        pedestal_shape = {
+        'collision': p.createCollisionShape(shapeType=p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=self.structure_config['pedestal']['meshScale']),
+        'visual': p.createVisualShape(shapeType=p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=self.structure_config['pedestal']['meshScale'])
         }
 
-        # Create the base (world_box)
-        world_box_pos = [0, 0, self.structure_config['world_box']['dimensions'][2] / 2]
+
+        # Define the mass, collision shape, and visual shape for the pedestal link
+        link_masses = [self.structure_config['pedestal']['mass']]
+        link_collision_shape_indices = [pedestal_shape['collision']]
+        link_visual_shape_indices = [pedestal_shape['visual']]
+        link_positions = [[0, 0, self.structure_config['world_box']['dimensions'][2] + self.structure_config['pedestal']['dimensions'][2]/2]]
+        link_orientations = [[0, 0, 0, 1]]
+        link_inertial_frame_positions = [[0, 0, 0]]
+        link_inertial_frame_orientations = [[0, 0, 0, 1]]
+        link_parent_indices = [0]  # Linking to the base
+        link_joint_types = [p.JOINT_PRISMATIC]
+        link_joint_axes = [[0, 0, 1]]  # Prismatic joint allowing movement along the z-axis
+
+        # Create the base (world_box) with a prismatic joint to the pedestal
         base_id = p.createMultiBody(
             baseMass=self.structure_config['world_box']['mass'],
-            baseCollisionShapeIndex=shapes['world_box']['collision'],
-            baseVisualShapeIndex=shapes['world_box']['visual'],
-            basePosition=world_box_pos,
+            baseCollisionShapeIndex=world_box_shape['collision'],
+            baseVisualShapeIndex=world_box_shape['visual'],
+            basePosition=[0, 0, self.structure_config['world_box']['dimensions'][2]/2],
             baseInertialFramePosition=[0, 0, 0],
+            linkMasses=link_masses,
+            linkCollisionShapeIndices=link_collision_shape_indices,
+            linkVisualShapeIndices=link_visual_shape_indices,
+            linkPositions=link_positions,
+            linkOrientations=link_orientations,
+            linkInertialFramePositions=link_inertial_frame_positions,
+            linkInertialFrameOrientations=link_inertial_frame_orientations,
+            linkParentIndices=link_parent_indices,
+            linkJointTypes=link_joint_types,
+            linkJointAxis=link_joint_axes,
             physicsClientId=client_id
         )
+
+        # Change dynamics of the base
         p.changeDynamics(
             base_id, -1,
             restitution=self.dynamics_config['world_box']['restitution'],
@@ -185,32 +212,9 @@ class SimulationNode(Node):
             physicsClientId=client_id
         )
 
-        # Create the pedestal with a prismatic joint to the world_box
-        pedestal_pos = [0, 0, world_box_pos[2] + self.structure_config['world_box']['dimensions'][2] / 2 + self.structure_config['pedestal']['dimensions'][0] / 2]
-        pedestal_id = p.createMultiBody(
-            baseMass=self.structure_config['pedestal']['mass'],
-            baseCollisionShapeIndex=shapes['pedestal']['collision'],
-            baseVisualShapeIndex=shapes['pedestal']['visual'],
-            basePosition=pedestal_pos,
-            baseInertialFramePosition=[0, 0, 0],
-            physicsClientId=client_id
-        )
-        self.get_logger().info(f"pedestal Body ID: {pedestal_id}")
-        p.createConstraint(
-            parentBodyUniqueId=base_id,
-            parentLinkIndex=-1,
-            childBodyUniqueId=pedestal_id,
-            childLinkIndex=-1,
-            jointType=p.JOINT_PRISMATIC,
-            jointAxis=[0, 0, 1],
-            parentFramePosition=[0, 0, self.structure_config['world_box']['dimensions'][2] / 2],
-            childFramePosition=[0, 0, -self.structure_config['pedestal']['dimensions'][0] / 2],
-            physicsClientId=client_id
-        )
-
-        # Store the body IDs for later use (e.g., control or simulation)
+        # Log the body ID for later use (e.g., control or simulation)
+        self.get_logger().info(f"Robot Base ID: {base_id}")
         self.robots.append(base_id)
-        self.robots.append(pedestal_id)
 
 
 
