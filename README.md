@@ -21,7 +21,7 @@ Before installing PyBullet, ensure you have the following prerequisites installe
 ```
     pip install --upgrade pip
 ```
-2. Install PyBullet
+2 . Install PyBullet
 ```
     pip install pybullet
 ```
@@ -35,3 +35,24 @@ print(pb.__version__)
  - Here we are using ROS2 since it has better dependenceies and the launch files in ROS2 provide more flexibility which can be very useful for the VSR 2.0
 
  For detailed info on the integration and the structure. Look [docs/VSR2_structure.md](docs/VSR2_structure.md)
+
+ ## Building the Package 
+
+ 1 . Use the colcon package builder
+ ```
+ colcon build 
+
+ ```
+ 2 . Source the package in the current directory
+
+ ```
+ source ~/install/setup.bash
+
+ ```
+ 3 . Run the simulation_node.py using the launch file to launch the pybullet GUI for the VSR Structure.
+
+ ```
+ ros2 launch virtual_shake_robot_pybullet node.launch.py
+
+ ```
+ 
