@@ -3,7 +3,7 @@ simulation_node:
     structure:
       world_box:
         dimensions: [50.0, 14.0, 2.0]  
-        mass: 5000000.0
+        mass: 0.0
         inertia: [83333333.0, 1043333333.0, 1123333333.0]  
 
       pedestal:
