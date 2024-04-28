@@ -181,7 +181,7 @@ class SimulationNode(Node):
         link_joint_axes = [[0, 0, 1]]  # Prismatic joint allowing movement along the z-axis
 
         # Create the base (world_box) with a prismatic joint to the pedestal
-        base_id = p.createMultiBody(
+        vsr_id = p.createMultiBody(
             baseMass=self.structure_config['world_box']['mass'],
             baseCollisionShapeIndex=world_box_shape['collision'],
             baseVisualShapeIndex=world_box_shape['visual'],
@@ -199,10 +199,10 @@ class SimulationNode(Node):
             linkJointAxis=link_joint_axes,
             physicsClientId=client_id
         )
-
+        assert vsr_id != -1, f"Failed to create the robot body. Returned ID: {vsr_id}"
         # Change dynamics of the base
         p.changeDynamics(
-            base_id, -1,
+            vsr_id, -1,
             restitution=self.dynamics_config['world_box']['restitution'],
             lateralFriction=self.dynamics_config['world_box']['lateralFriction'],
             spinningFriction=self.dynamics_config['world_box']['spinningFriction'],
@@ -213,8 +213,8 @@ class SimulationNode(Node):
         )
 
         # Log the body ID for later use (e.g., control or simulation)
-        self.get_logger().info(f"Robot Base ID: {base_id}")
-        self.robots.append(base_id)
+        self.get_logger().info(f"Robot Base ID: {vsr_id}")
+        self.robots.append (vsr_id)
 
 
 
