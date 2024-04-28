@@ -97,7 +97,7 @@ class SimulationNode(Node):
         }
 
         self.client = []
-        self.robots = []
+        
 
       
 
@@ -212,10 +212,7 @@ class SimulationNode(Node):
             physicsClientId=client_id
         )
 
-        # Log the body ID for later use (e.g., control or simulation)
-        self.get_logger().info(f"Robot Base ID: {vsr_id}")
-        self.robots.append (vsr_id)
-
+        
 
 
     def run_simulation(self, client, duration=5):
