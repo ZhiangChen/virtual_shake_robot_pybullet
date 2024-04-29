@@ -32,24 +32,17 @@ class SimulationNode(Node):
                 ('dynamics.world_box.rollingFriction', rclpy.Parameter.Type.DOUBLE),
                 ('dynamics.world_box.contactDamping', rclpy.Parameter.Type.DOUBLE),
                 ('dynamics.world_box.contactStiffness', rclpy.Parameter.Type.DOUBLE),
-                ('dynamics.box.restitution', rclpy.Parameter.Type.DOUBLE),
-                ('dynamics.box.lateralFriction', rclpy.Parameter.Type.DOUBLE),
-                ('dynamics.box.spinningFriction', rclpy.Parameter.Type.DOUBLE),
-                ('dynamics.box.rollingFriction', rclpy.Parameter.Type.DOUBLE),
-                ('dynamics.box.contactDamping', rclpy.Parameter.Type.DOUBLE),
-                ('dynamics.box.contactStiffness', rclpy.Parameter.Type.DOUBLE),
-                ('dynamics.slide_box.restitution', rclpy.Parameter.Type.DOUBLE),
-                ('dynamics.slide_box.lateralFriction', rclpy.Parameter.Type.DOUBLE),
-                ('dynamics.slide_box.spinningFriction', rclpy.Parameter.Type.DOUBLE),
-                ('dynamics.slide_box.rollingFriction', rclpy.Parameter.Type.DOUBLE),
-                ('dynamics.slide_box.contactDamping', rclpy.Parameter.Type.DOUBLE),
-                ('dynamics.slide_box.contactStiffness', rclpy.Parameter.Type.DOUBLE),
-                ('structure.box.mass', rclpy.Parameter.Type.DOUBLE),
-                ('structure.box.inertia', rclpy.Parameter.Type.DOUBLE_ARRAY),
-                ('structure.box.dimensions', rclpy.Parameter.Type.DOUBLE_ARRAY),
-                ('structure.slide_box.inertia', rclpy.Parameter.Type.DOUBLE_ARRAY),
-                ('structure.slide_box.dimensions', rclpy.Parameter.Type.DOUBLE_ARRAY),
-                ('structure.slide_box.mass', rclpy.Parameter.Type.DOUBLE),
+                ('dynamics.pedestal.restitution', rclpy.Parameter.Type.DOUBLE),
+                ('dynamics.pedestal.lateralFriction', rclpy.Parameter.Type.DOUBLE),
+                ('dynamics.pedestal.spinningFriction', rclpy.Parameter.Type.DOUBLE),
+                ('dynamics.pedestal.rollingFriction', rclpy.Parameter.Type.DOUBLE),
+                ('dynamics.pedestal.contactDamping', rclpy.Parameter.Type.DOUBLE),
+                ('dynamics.pedestal.contactStiffness', rclpy.Parameter.Type.DOUBLE),
+                ('structure.pedestal.mass', rclpy.Parameter.Type.DOUBLE),
+                ('structure.pedestal.inertia', rclpy.Parameter.Type.DOUBLE_ARRAY),
+                ('structure.pedestal.dimensions', rclpy.Parameter.Type.DOUBLE_ARRAY),
+                ('structure.pedestal.mesh', rclpy.Parameter.Type.STRING),
+                ('structure.pedestal.meshScale', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('structure.world_box.mass', rclpy.Parameter.Type.DOUBLE),
                 ('structure.world_box.inertia', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('structure.world_box.dimensions', rclpy.Parameter.Type.DOUBLE_ARRAY)
@@ -75,35 +68,27 @@ class SimulationNode(Node):
                 'contactDamping': self.get_parameter('dynamics.world_box.contactDamping').value,
                 'contactStiffness': self.get_parameter('dynamics.world_box.contactStiffness').value,
             },
-            'box': {
-                'restitution': self.get_parameter('dynamics.box.restitution').value,
-                'lateralFriction': self.get_parameter('dynamics.box.lateralFriction').value,
-                'spinningFriction': self.get_parameter('dynamics.box.spinningFriction').value,
-                'rollingFriction': self.get_parameter('dynamics.box.rollingFriction').value,
-                'contactDamping': self.get_parameter('dynamics.box.contactDamping').value,
-                'contactStiffness': self.get_parameter('dynamics.box.contactStiffness').value,
+            'pedestal': {
+                'restitution': self.get_parameter('dynamics.pedestal.restitution').value,
+                'lateralFriction': self.get_parameter('dynamics.pedestal.lateralFriction').value,
+                'spinningFriction': self.get_parameter('dynamics.pedestal.spinningFriction').value,
+                'rollingFriction': self.get_parameter('dynamics.pedestal.rollingFriction').value,
+                'contactDamping': self.get_parameter('dynamics.pedestal.contactDamping').value,
+                'contactStiffness': self.get_parameter('dynamics.pedestal.contactStiffness').value,
             },
-            'slide_box': {
-                'restitution': self.get_parameter('dynamics.slide_box.restitution').value,
-                'lateralFriction': self.get_parameter('dynamics.slide_box.lateralFriction').value,
-                'spinningFriction': self.get_parameter('dynamics.slide_box.spinningFriction').value,
-                'rollingFriction': self.get_parameter('dynamics.slide_box.rollingFriction').value,
-                'contactDamping': self.get_parameter('dynamics.slide_box.contactDamping').value,
-                'contactStiffness': self.get_parameter('dynamics.slide_box.contactStiffness').value,
+            
             }
-        }
+
 
         self.structure_config = {
-            'box': {
-                'mass': self.get_parameter('structure.box.mass').value,
-                'inertia': self.get_parameter('structure.box.inertia').value,
-                'dimensions': self.get_parameter('structure.box.dimensions').value
+            'pedestal': {
+                'mass': self.get_parameter('structure.pedestal.mass').value,
+                'inertia': self.get_parameter('structure.pedestal.inertia').value,
+                'dimensions': self.get_parameter('structure.pedestal.dimensions').value,
+                'meshScale': self.get_parameter('structure.pedestal.meshScale').value
             },
-            'slide_box': {
-                'mass': self.get_parameter('structure.slide_box.mass').value,
-                'inertia': self.get_parameter('structure.slide_box.inertia').value,
-                'dimensions': self.get_parameter('structure.slide_box.dimensions').value
-            },
+            
+            
             'world_box': {
                 'mass': self.get_parameter('structure.world_box.mass').value,
                 'inertia': self.get_parameter('structure.world_box.inertia').value,
@@ -112,21 +97,10 @@ class SimulationNode(Node):
         }
 
         self.client = []
-        self.robots = []
+        
 
       
 
-    # def load_config(self, filename):
-    #     """Load configuration from a YAML file."""
-    #     if not os.path.exists(filename):
-    #        self.get_logger().error(f"Configuration file not found: {filename}")
-    #        return{} 
-        
-    #     with open(filename, 'r') as file:
-    #         config = yaml.safe_load(file)
-    #         print(config)
-    #         return config
-        
     def server_connection(self):
         """establish a connection the the Pybullet GUI"""
         client = p.connect(p.GUI) #will return a client ID
@@ -144,6 +118,7 @@ class SimulationNode(Node):
     def setup_simulation(self, client_id):
         '''this helps to setup the simulation using the physics_engine parmeters file'''
         gravity = self.get_parameter('engineSettings.gravity').value
+        print(f"Gravity retrived : {gravity}")
         time_step = self.get_parameter('engineSettings.timeStep').value
         num_solver_iterations = self.get_parameter('engineSettings.numSolverIterations').value
         use_split_impulse = self.get_parameter('engineSettings.useSplitImpulse').value
@@ -153,6 +128,7 @@ class SimulationNode(Node):
 
         # Use these settings to configure the physics engine
         p.setGravity(*gravity, physicsClientId=client_id)
+        print(f"Gravity set for the client {client_id}:{gravity}")
         p.setTimeStep(time_step, physicsClientId=client_id)
         p.setPhysicsEngineParameter(numSolverIterations=num_solver_iterations,
                                     useSplitImpulse=use_split_impulse,
@@ -167,38 +143,77 @@ class SimulationNode(Node):
         pass
 
 
+    
     def create_robot(self, client_id):
-        """Create the robot based on the dynamics and structure settings."""
-        # Retrieve and parse the configuration for the robot's structure and dynamics
-        for link_name in self.structure_config.keys():
-            # Extract the configuration for this particular link
-            link_params = self.get_parameter(f'structure.{link_name}').get_value()
-            link_dynamics = self.get_parameter(f'dynamics.{link_name}').get_value()
+            
+        
+        """Create the robot using dynamics and structure settings with joints, using a mesh for the pedestal."""
+        p.loadURDF("plane.urdf", physicsClientId=client_id)
 
-            # Create collision and visual shapes for the link
-            collision_shape_id = p.createCollisionShape(p.GEOM_BOX, halfExtents=[x / 2 for x in link_params['dimensions']])
-            visual_shape_id = p.createVisualShape(p.GEOM_BOX, halfExtents=[x / 2 for x in link_params['dimensions']])
-            
-            # Create the multibody for the link
-            body_id = p.createMultiBody(baseMass=link_params['mass'],
-                                        baseCollisionShapeIndex=collision_shape_id,
-                                        baseVisualShapeIndex=visual_shape_id,
-                                        basePosition=link_params.get('position', [0, 0, 0]),  
-                                        baseInertialFramePosition=link_params.get('inertia_position', [0, 0, 0]),
-                                        physicsClientId=client_id)
-            
-            # Set the dynamics properties for the link
-            p.changeDynamics(body_id, -1,
-                            restitution=link_dynamics['restitution'],
-                            lateralFriction=link_dynamics['lateralFriction'],
-                            spinningFriction=link_dynamics['spinningFriction'],
-                            rollingFriction=link_dynamics['rollingFriction'],
-                            contactDamping=link_dynamics['contactDamping'],
-                            contactStiffness=link_dynamics['contactStiffness'],
-                            physicsClientId=client_id)
-            
-            # Store the body ID for later use (e.g., control or simulation)
-            self.robots.append(body_id)
+        # Create the collision and visual shapes for world_box and pedestal
+        world_box_shape = {
+            'collision': p.createCollisionShape(p.GEOM_BOX, halfExtents=[x / 2 for x in self.structure_config['world_box']['dimensions']]),
+            'visual': p.createVisualShape(p.GEOM_BOX, halfExtents=[x / 2 for x in self.structure_config['world_box']['dimensions']])
+        }
+
+        # Fetch the mesh path for the pedestal from ROS2 parameters
+        pedestal_mesh_path = self.get_parameter('structure.pedestal.mesh').get_parameter_value().string_value
+
+        self.get_logger().info(f"Using meshScale: {self.structure_config['pedestal']['meshScale']}")
+    
+        # Load the mesh for the pedestal
+        pedestal_shape = {
+        'collision': p.createCollisionShape(shapeType=p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=self.structure_config['pedestal']['meshScale']),
+        'visual': p.createVisualShape(shapeType=p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=self.structure_config['pedestal']['meshScale'])
+        }
+
+
+        # Define the mass, collision shape, and visual shape for the pedestal link
+        link_masses = [self.structure_config['pedestal']['mass']]
+        link_collision_shape_indices = [pedestal_shape['collision']]
+        link_visual_shape_indices = [pedestal_shape['visual']]
+        link_positions = [[0, 0, self.structure_config['world_box']['dimensions'][2] + self.structure_config['pedestal']['dimensions'][2]/2]]
+        link_orientations = [[0, 0, 0, 1]]
+        link_inertial_frame_positions = [[0, 0, 0]]
+        link_inertial_frame_orientations = [[0, 0, 0, 1]]
+        link_parent_indices = [0]  # Linking to the base
+        link_joint_types = [p.JOINT_PRISMATIC]
+        link_joint_axes = [[0, 0, 1]]  # Prismatic joint allowing movement along the z-axis
+
+        # Create the base (world_box) with a prismatic joint to the pedestal
+        vsr_id = p.createMultiBody(
+            baseMass=self.structure_config['world_box']['mass'],
+            baseCollisionShapeIndex=world_box_shape['collision'],
+            baseVisualShapeIndex=world_box_shape['visual'],
+            basePosition=[0, 0, self.structure_config['world_box']['dimensions'][2]/2],
+            baseInertialFramePosition=[0, 0, 0],
+            linkMasses=link_masses,
+            linkCollisionShapeIndices=link_collision_shape_indices,
+            linkVisualShapeIndices=link_visual_shape_indices,
+            linkPositions=link_positions,
+            linkOrientations=link_orientations,
+            linkInertialFramePositions=link_inertial_frame_positions,
+            linkInertialFrameOrientations=link_inertial_frame_orientations,
+            linkParentIndices=link_parent_indices,
+            linkJointTypes=link_joint_types,
+            linkJointAxis=link_joint_axes,
+            physicsClientId=client_id
+        )
+        assert vsr_id != -1, f"Failed to create the robot body. Returned ID: {vsr_id}"
+        # Change dynamics of the base
+        p.changeDynamics(
+            vsr_id, -1,
+            restitution=self.dynamics_config['world_box']['restitution'],
+            lateralFriction=self.dynamics_config['world_box']['lateralFriction'],
+            spinningFriction=self.dynamics_config['world_box']['spinningFriction'],
+            rollingFriction=self.dynamics_config['world_box']['rollingFriction'],
+            contactDamping=self.dynamics_config['world_box']['contactDamping'],
+            contactStiffness=self.dynamics_config['world_box']['contactStiffness'],
+            physicsClientId=client_id
+        )
+
+        
+
 
     def run_simulation(self, client, duration=5):
         """run the simulation for a specfic number of time steps"""
@@ -221,7 +236,8 @@ def main(args=None):
     simulation_node.server_connection()  # Connect GUI for visualization
     simulation_node.create_servers(2)
     simulation_node.setup_simulation(simulation_node.client[0])
-    simulation_node.run_simulation(simulation_node.client[0], duration=50)
+    simulation_node.create_robot(simulation_node.client[0])
+    simulation_node.run_simulation(simulation_node.client[0], duration=5000)
     simulation_node.disconnect()
     rclpy.shutdown()
 
