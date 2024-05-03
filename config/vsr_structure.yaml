@@ -3,12 +3,12 @@ simulation_node:
     structure:
       world_box:
         dimensions: [50.0, 14.0, 2.0]  
-        mass: 0.0
+        mass: 0.00
         inertia: [83333333.0, 1043333333.0, 1123333333.0]  
 
       pedestal:
         dimensions: [10.0, 10.0, 0.1]  
         mass: 10000.0
         inertia: [83541.0, 83541.0, 166666.0]  
-        mesh: "/home/akshay/mesh files/meshfiles/pedestal_2.obj"
+        mesh: "/home/akshay/mesh files/cropped.obj"
         meshScale: [0.5,0.5,0.5]

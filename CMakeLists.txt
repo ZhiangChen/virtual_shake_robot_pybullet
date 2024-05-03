@@ -15,6 +15,7 @@ find_package(rclpy REQUIRED)
 
 install(PROGRAMS
   src/simulation_node.py
+  src/control_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
