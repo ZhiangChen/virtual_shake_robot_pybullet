@@ -7,6 +7,7 @@ import yaml
 import pybullet as p
 import pybullet_data
 import time
+import numpy as np
 from rclpy.node import Node
 from rclpy.node import ParameterDescriptor
 from rclpy.action import ActionServer
@@ -22,6 +23,8 @@ class SimulationNode(Node):
             'execute_movement',
             self.execute_callback
         )
+        self.get_logger().info("Action server up and running!")
+
         ##Decalring parameters
         self.declare_parameters(
             namespace="",
@@ -48,8 +51,8 @@ class SimulationNode(Node):
                 ('structure.pedestal.mass', rclpy.Parameter.Type.DOUBLE),
                 ('structure.pedestal.inertia', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('structure.pedestal.dimensions', rclpy.Parameter.Type.DOUBLE_ARRAY),
-                ('structure.pedestal.mesh', rclpy.Parameter.Type.STRING),
-                ('structure.pedestal.meshScale', rclpy.Parameter.Type.DOUBLE_ARRAY),
+                ('structure.pedestal.mesh',rclpy.Parameter.Type.STRING),
+                ('structure.pedestal.meshScale',rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('structure.world_box.mass', rclpy.Parameter.Type.DOUBLE),
                 ('structure.world_box.inertia', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('structure.world_box.dimensions', rclpy.Parameter.Type.DOUBLE_ARRAY)
@@ -91,7 +94,6 @@ class SimulationNode(Node):
                 'mass': self.get_parameter('structure.pedestal.mass').value,
                 'inertia': self.get_parameter('structure.pedestal.inertia').value,
                 'dimensions': self.get_parameter('structure.pedestal.dimensions').value,
-                'meshScale': self.get_parameter('structure.pedestal.meshScale').value
             },
          
          
@@ -143,114 +145,81 @@ class SimulationNode(Node):
                                     deterministicOverlappingPairs=overlapping_pairs,
                                     physicsClientId=client_id)
 
+    
+
 
     def execute_callback(self, goal_handle):
-        '''recieve the a and f values send by the control node'''
+        '''retrieve values from the action server'''
         a = goal_handle.request.a
         f = goal_handle.request.f
 
-        # Log received values for 'a' and 'f'
-        self.get_logger().info(f'Received amplitude (a): {a}')
-        self.get_logger().info(f'Received frequency (f): {f}')
+        self.get_logger().debug(f'Received amplitude (a): {a}')
+        self.get_logger().debug(f'Received frequency (f): {f}')
 
-        # Validate the received values
-        if a < 0 or f < 0:
-            self.get_logger().error('Received negative values, which are not allowed.')
-            goal_handle.abort()
-            result = AF.Result()
-            result.success = False
-            return result
+        # Calculate velocities based on the received values
+        velocities = self.calculate_target_velocity(a, f)
 
-        # Simulate the operation based on a and f
-        feedback_msg = AF.Feedback()
-        for i in range(1, 101):
-            simulation_progress = a * f * i * 0.01
-            feedback_msg.feedback = simulation_progress
-            goal_handle.publish_feedback(feedback_msg)
-            rclpy.sleep(0.1)
+        self.get_logger.debug(f'Calculated velocity : {velocities}')
 
+        # Apply these velocities to the pedestal joint
+        self.apply_joint_velocities(velocities)
+
+        # Assuming successful application of velocities
         goal_handle.succeed()
         result = AF.Result()
         result.success = True
         return result
 
+
     def create_robot(self, client_id):
-        """Create the robot using dynamics and structure settings with joints, using a mesh for the pedestal."""
         p.loadURDF("plane.urdf", physicsClientId=client_id)
 
-        # Create the collision and visual shapes for world_box and pedestal
+        # Define shapes and properties for world_box
         world_box_shape = {
             'collision': p.createCollisionShape(p.GEOM_BOX, halfExtents=[x / 2 for x in self.structure_config['world_box']['dimensions']]),
             'visual': p.createVisualShape(p.GEOM_BOX, halfExtents=[x / 2 for x in self.structure_config['world_box']['dimensions']])
         }
+        world_box_id = p.createMultiBody(baseMass=self.structure_config['world_box']['mass'],
+                                        baseCollisionShapeIndex=world_box_shape['collision'],
+                                        baseVisualShapeIndex=world_box_shape['visual'],
+                                        basePosition=[0, 0, self.structure_config['world_box']['dimensions'][2] / 2],
+                                        physicsClientId=client_id)
 
-        # Fetch the mesh path for the pedestal from ROS2 parameters
-        pedestal_mesh_path = self.get_parameter('structure.pedestal.mesh').get_parameter_value().string_value
-        self.get_logger().info(f"Using meshScale: {self.structure_config['pedestal']['meshScale']}")
+        # Attempt to retrieve mesh parameters safely
+        try:
+            pedestal_mesh_path = self.get_parameter('structure.pedestal.mesh').value
+            mesh_scale = self.get_parameter('structure.pedestal.meshScale').value
+            pedestal_shape = {
+                'collision': p.createCollisionShape(shapeType=p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=mesh_scale),
+                'visual': p.createVisualShape(shapeType=p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=mesh_scale)
+            }
+        except rclpy.exceptions.ParameterUninitializedException:
+            # Fallback to box dimensions if mesh parameters are not found
+            pedestal_shape = {
+                'collision': p.createCollisionShape(p.GEOM_BOX, halfExtents=[d / 2 for d in self.structure_config['pedestal']['dimensions']]),
+                'visual': p.createVisualShape(p.GEOM_BOX, halfExtents=[d / 2 for d in self.structure_config['pedestal']['dimensions']], rgbaColor=[1, 0, 0, 1])
+            }
 
-        # Load the mesh for the pedestal
-        pedestal_shape = {
-            'collision': p.createCollisionShape(shapeType=p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=self.structure_config['pedestal']['meshScale']),
-            'visual': p.createVisualShape(shapeType=p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=self.structure_config['pedestal']['meshScale'])
-        }
-
-        # Correct positioning of the pedestal
-        world_box_height = self.structure_config['world_box']['dimensions'][2]
-        pedestal_height = self.structure_config['pedestal']['dimensions'][2]
-        pedestal_base_position = world_box_height + pedestal_height / 2
-
-        # Define the mass, collision shape, and visual shape for the pedestal link
-        link_masses = [self.structure_config['pedestal']['mass']]
-        link_collision_shape_indices = [pedestal_shape['collision']]
-        link_visual_shape_indices = [pedestal_shape['visual']]
-        link_positions = [[0, 0, pedestal_base_position]]
-        link_orientations = [[0, 0, 0, 1]]
-        link_inertial_frame_positions = [[0, 0, 0]]
-        link_inertial_frame_orientations = [[0, 0, 0, 1]]
-        link_parent_indices = [0]  # Linking to the base
-        link_joint_types = [p.JOINT_PRISMATIC]
-        link_joint_axes = [[0, 0, 1]]  # Prismatic joint allowing movement along the z-axis
-
-        # Log positioning data
-        self.get_logger().info(f"World Box Height: {world_box_height}")
-        self.get_logger().info(f"Pedestal Height: {pedestal_height}")
-        self.get_logger().info(f"Calculated pedestal base position: {pedestal_base_position}")
-        self.get_logger().info(f"Positioning pedestal at: {[0, 0, pedestal_base_position]}")
-
-        # Create the base (world_box) with a prismatic joint to the pedestal
-        vsr_id = p.createMultiBody(
-            baseMass=self.structure_config['world_box']['mass'],
-            baseCollisionShapeIndex=world_box_shape['collision'],
-            baseVisualShapeIndex=world_box_shape['visual'],
-            basePosition=[0, 0, self.structure_config['world_box']['dimensions'][2]/2],
-            baseInertialFramePosition=[0, 0, 0],
-            linkMasses=link_masses,
-            linkCollisionShapeIndices=link_collision_shape_indices,
-            linkVisualShapeIndices=link_visual_shape_indices,
-            linkPositions=link_positions,
-            linkOrientations=link_orientations,
-            linkInertialFramePositions=link_inertial_frame_positions,
-            linkInertialFrameOrientations=link_inertial_frame_orientations,
-            linkParentIndices=link_parent_indices,
-            linkJointTypes=link_joint_types,
-            linkJointAxis=link_joint_axes,
-            physicsClientId=client_id
-        )
-        assert vsr_id != -1, f"Failed to create the robot body. Returned ID: {vsr_id}"
-
-        # Change dynamics of the base
+        # Create and configure pedestal
+        pedestal_id = p.createMultiBody(baseMass=self.structure_config['pedestal']['mass'],
+                                        baseCollisionShapeIndex=pedestal_shape['collision'],
+                                        baseVisualShapeIndex=pedestal_shape['visual'],
+                                        basePosition=[0, 0, 2.1],
+                                        physicsClientId=client_id)
+        # Apply dynamics settings to pedestal
         p.changeDynamics(
-            vsr_id, -1,
-            restitution=self.dynamics_config['world_box']['restitution'],
-            lateralFriction=self.dynamics_config['world_box']['lateralFriction'],
-            spinningFriction=self.dynamics_config['world_box']['spinningFriction'],
-            rollingFriction=self.dynamics_config['world_box']['rollingFriction'],
-            contactDamping=self.dynamics_config['world_box']['contactDamping'],
-            contactStiffness=self.dynamics_config['world_box']['contactStiffness'],
+            pedestal_id, -1,
+            restitution=self.dynamics_config['pedestal']['restitution'],
+            lateralFriction=self.dynamics_config['pedestal']['lateralFriction'],
+            spinningFriction=self.dynamics_config['pedestal']['spinningFriction'],
+            rollingFriction=self.dynamics_config['pedestal']['rollingFriction'],
+            contactDamping=self.dynamics_config['pedestal']['contactDamping'],
+            contactStiffness=self.dynamics_config['pedestal']['contactStiffness'],
             physicsClientId=client_id
         )
 
-     
+
+
 
     def run_simulation(self, client, duration=5):
         """run the simulation for a specfic number of time steps"""
@@ -276,6 +245,8 @@ def main(args=None):
     simulation_node.create_robot(simulation_node.client[0])
     simulation_node.run_simulation(simulation_node.client[0], duration=5000)
     simulation_node.disconnect()
+    simulation_node.get_logger().set_level(rclpy.logging.LoggingSeverity.DEBUG)
+    rclpy.spin(simulation_node)
     rclpy.shutdown()
 
 if __name__ == '__main__' :

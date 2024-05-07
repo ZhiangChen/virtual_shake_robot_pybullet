@@ -13,6 +13,7 @@
   <depend>rclpy</depend> 
   <depend>action_msgs</depend>
   <depend>rosidl_default_runtime</depend>
+  <depend>rosidl_default_generators</depend>
  
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
@@ -20,6 +21,7 @@
   <exec_depend>pybullet</exec_depend> 
   <exec_depend>simualation_node</exec_depend>
   <exec_depend>control_node</exec_depend>
+ 
   <export>
     <build_type>ament_cmake</build_type>
   </export>

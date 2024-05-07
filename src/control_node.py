@@ -4,6 +4,7 @@ import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from virtual_shake_robot_pybullet.action import AF  
+import numpy as np
 
 class ControlNode(Node):
     def __init__(self):
@@ -24,32 +25,31 @@ class ControlNode(Node):
         self.get_logger().debug("Goal sent.")
 
     def feedback_callback(self, feedback_msg):
-        self.get_logger().info("Feedback call Recieved!")
+        self.get_logger().debug("Feedback call Recieved!")
         feedback = feedback_msg.feedback
-        self.get_logger().info(f'Received feedback: {feedback}')
+        self.get_logger().debug(f'Received feedback: {feedback}')
 
     def goal_response_callback(self, future):
-        self.get_logger().info("Goal response triggered")
+        self.get_logger().debug("Goal response triggered")
         goal_handle = future.result()
         if not goal_handle.accepted:
-            self.get_logger().info('Goal rejected :(')
+            self.get_logger().debug('Goal rejected :(')
             return
 
-        self.get_logger().info('Goal accepted :)')
+        self.get_logger().debug('Goal accepted :)')
         result_future = goal_handle.get_result_async()
         result_future.add_done_callback(self.get_result_callback)
 
     def get_result_callback(self, future):
-        self.get_logger().info('Result callback triggered')
+        self.get_logger().debug('Result callback triggered')
         result = future.result().result
         if result.success:
-            self.get_logger().info('Goal succeeded!')
+            self.get_logger().debug('Goal succeeded!')
         else:
-            self.get_logger().info('Goal failed!')
+            self.get_logger().debug('Goal failed!')
 
-    def generate_trajectory(self):
-        '''this will calcualte the positon and velocity depending on the input from the user'''
-        pass
+   
+
 def main(args=None):
     rclpy.init(args=args)
     node = ControlNode()

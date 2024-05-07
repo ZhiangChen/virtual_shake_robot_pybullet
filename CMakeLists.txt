@@ -8,9 +8,24 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclpy REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+find_package(action_msgs REQUIRED)
+
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "action/AF.action"
+)
+
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
+
+# Install Python modules
+install(DIRECTORY
+    src/virtual_shake_robot_pybullet/
+    DESTINATION lib/${PROJECT_NAME}
+    FILES_MATCHING PATTERN "*.py"
+)
+
 
 
 install(PROGRAMS
@@ -28,6 +43,7 @@ install(DIRECTORY
     launch
     DESTINATION share/${PROJECT_NAME}
 )
+
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
