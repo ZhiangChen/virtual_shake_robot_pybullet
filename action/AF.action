@@ -1,0 +1,11 @@
+# Goal definition
+float64 a
+float64 f
+
+---
+# Result definition
+bool success
+
+---
+# Feedback definition
+float64 feedback
