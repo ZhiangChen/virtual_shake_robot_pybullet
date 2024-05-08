@@ -15,7 +15,7 @@ find_package(builtin_interfaces REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/AF.action"
-  "msg/TrajectoryAction.msg"
+  "action/TrajectoryAction.action"
   DEPENDENCIES builtin_interfaces std_msgs
 )
 
