@@ -10,5 +10,5 @@ simulation_node:
         dimensions: [10.0, 10.0, 0.1]  
         mass: 10000.0
         inertia: [83541.0, 83541.0, 166666.0]  
-        mesh: "/home/akshay/mesh files/cropped.obj"
+        mesh: "/home/akshay/mesh files/9S38-8-21-2022-textured_model/part0.obj"
         meshScale: [0.5,0.5,0.5]

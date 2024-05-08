@@ -201,14 +201,14 @@ class SimulationNode(Node):
             }
 
         # Create and configure pedestal
-        pedestal_id = p.createMultiBody(baseMass=self.structure_config['pedestal']['mass'],
+        vsr_id = p.createMultiBody(baseMass=self.structure_config['pedestal']['mass'],
                                         baseCollisionShapeIndex=pedestal_shape['collision'],
                                         baseVisualShapeIndex=pedestal_shape['visual'],
                                         basePosition=[0, 0, 2.1],
                                         physicsClientId=client_id)
         # Apply dynamics settings to pedestal
         p.changeDynamics(
-            pedestal_id, -1,
+            vsr_id, -1,
             restitution=self.dynamics_config['pedestal']['restitution'],
             lateralFriction=self.dynamics_config['pedestal']['lateralFriction'],
             spinningFriction=self.dynamics_config['pedestal']['spinningFriction'],
