@@ -3,66 +3,81 @@ import sys
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
-from virtual_shake_robot_pybullet.action import AF  
+from virtual_shake_robot_pybullet.action import TrajectoryAction
 import numpy as np
 
 class ControlNode(Node):
-    def __init__(self):
+    def __init__(self, amplitude, frequency):
         super().__init__('control_node')
-        self._action_client = ActionClient(self, AF, 'execute_movement')
-        self.get_logger().debug("Action client created.")
+        self.amplitude = amplitude
+        self.frequency = frequency
+        self.control_frequency = self.declare_parameter('simulation_node.engineSettings.ControlFrequency', 1000).value
+        self._trajectory_action_client = ActionClient(self, TrajectoryAction, 'trajectory_action')
+        self.get_logger().info(f"Initialized with Amplitude: {amplitude} and Frequency: {frequency}")
 
-    def send_goal(self, a, f):
-        goal_msg = AF.Goal()
-        goal_msg.a = a
-        goal_msg.f = f
+        # Calculate trajectory and send it
+        self.calculate_and_send_trajectory()
 
-        self.get_logger().debug("Waiting for action server...")
-        self._action_client.wait_for_server()
-        self.get_logger().debug("Action server available.")
-        self.send_goal_future = self._action_client.send_goal_async(goal_msg, feedback_callback=self.feedback_callback)
-        self.send_goal_future.add_done_callback(self.goal_response_callback)
-        self.get_logger().debug("Goal sent.")
+    def calculate_and_send_trajectory(self):
+        positions, velocities, timestamps = self.generate_trajectory()
+        self.send_trajectory_goal(positions, velocities, timestamps)
 
-    def feedback_callback(self, feedback_msg):
-        self.get_logger().debug("Feedback call Recieved!")
-        feedback = feedback_msg.feedback
-        self.get_logger().debug(f'Received feedback: {feedback}')
+    def generate_trajectory(self):
+        """Generate position and velocity trajectory based on A and F."""
+        T = 1.0 / self.frequency
+        num_samples = int(self.control_frequency * T)
+        t = np.linspace(0, T, num_samples)
+        positions = -self.amplitude * np.cos(2 * np.pi * self.frequency * t) + self.amplitude
+        velocities = 2 * np.pi * self.amplitude * self.frequency * np.sin(2 * np.pi * self.frequency * t)
+        self.get_logger().info(f"Position list:{positions}, Velocity list: {velocities}")
+        timestamps = t.tolist()
+        positions = positions.tolist()
+        velocities = velocities.tolist()
+        return positions, velocities, timestamps
 
+    def send_trajectory_goal(self, positions, velocities, timestamps):
+        goal_msg = TrajectoryAction.Goal()
+        goal_msg.position_list = positions
+        goal_msg.velocity_list = velocities
+        goal_msg.timestamp_list = timestamps
+        
+        # Ensure the action server is available
+        if not self._trajectory_action_client.wait_for_server(timeout_sec=10.0):
+            self.get_logger().error("Action server not available after waiting")
+            return
+        
+        self.get_logger().info("Action server is available, sending goal.")
+        
+        
+        send_goal_future = self._trajectory_action_client.send_goal_async(goal_msg)
+        send_goal_future.add_done_callback(self.goal_response_callback)
+        
     def goal_response_callback(self, future):
-        self.get_logger().debug("Goal response triggered")
         goal_handle = future.result()
         if not goal_handle.accepted:
-            self.get_logger().debug('Goal rejected :(')
-            return
+            self.get_logger().error('Goal rejected by action server.')
+        else:
+            self.get_logger().info('Goal accepted by action server.')
+            
+            get_result_future = goal_handle.get_result_async()
+            get_result_future.add_done_callback(self.final_result_callback)
 
-        self.get_logger().debug('Goal accepted :)')
-        result_future = goal_handle.get_result_async()
-        result_future.add_done_callback(self.get_result_callback)
-
-    def get_result_callback(self, future):
-        self.get_logger().debug('Result callback triggered')
+    def final_result_callback(self, future):
         result = future.result().result
         if result.success:
-            self.get_logger().debug('Goal succeeded!')
+            self.get_logger().info("Action succeeded!")
         else:
-            self.get_logger().debug('Goal failed!')
+            self.get_logger().error("Action failed!")
 
-   
 
 def main(args=None):
     rclpy.init(args=args)
-    node = ControlNode()
-    node.get_logger().set_level(rclpy.logging.LoggingSeverity.DEBUG)  # Set log level to debug
-
-    if len(sys.argv) == 3:
-        a = float(sys.argv[1])
-        f = float(sys.argv[2])
-        print(f"received the values of {a} and {f}")
-        node.send_goal(a, f)
-    else:
-        print("Usage: control_node.py <a> <f>")
-        
+    if len(sys.argv) < 3:
+        print("Usage: control_node.py <amplitude> <frequency>")
+        return
+    amplitude = float(sys.argv[1])
+    frequency = float(sys.argv[2])
+    node = ControlNode(amplitude, frequency)
     rclpy.spin(node)
     rclpy.shutdown()
 
