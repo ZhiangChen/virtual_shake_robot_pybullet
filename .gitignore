@@ -165,3 +165,5 @@ build/
 install/
 log/
 .vscode/settings.json
+launch/install
+launch/log

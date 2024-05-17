@@ -8,5 +8,5 @@ simulation_node:
       splitImpulsePenetrationThreshold: -0.04
       enableConeFriction: true
       deterministicOverlappingPairs: 1
-      ControlFrequency: 1000
+      ControlFrequency: 100
 
