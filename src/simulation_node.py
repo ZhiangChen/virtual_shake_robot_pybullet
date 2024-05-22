@@ -3,9 +3,12 @@ import rclpy
 import pybullet as p
 import pybullet_data
 import time
+import matplotlib.pyplot as plt
 from rclpy.node import Node
 from rclpy.action import ActionServer
 from virtual_shake_robot_pybullet.action import TrajectoryAction
+from std_msgs.msg import Float64
+from geometry_msgs.msg import Twist, Vector3
 
 class SimulationNode(Node):
     def __init__(self):
@@ -18,9 +21,18 @@ class SimulationNode(Node):
             'trajectory_action',
             execute_callback=self.execute_trajectory_callback
         )
-        self.client_id = None
-        self.vsr_id = None
+        
         self.get_logger().info("Action server up and running!")
+
+        # Publishers for postion and velocity data in the  simuulation thread
+        self.postion_publisher = self.create_publisher(Float64, 'pedestal_postion_publisher', 10)
+        self.velocity_publisher = self.create_publisher(Float64, 'pedestal_velocity_publisher', 10)
+
+        # #desired state publisher
+
+        self.desired_position_publisher = self.create_publisher(Float64, 'desired_position_topic', 10)
+        self.desired_velocity_publisher = self.create_publisher(Float64, 'desired_velocity_topic', 10)
+
 
         # Declaring parameters
         self.declare_parameters(
@@ -100,12 +112,22 @@ class SimulationNode(Node):
 
         self.client = []
 
+        ## To store the values for the plot
+
+        self.desired_positions = []
+        self.desired_velocities = []
+        self.actual_positions = []
+        self.actual_velocities = []
+        self.timestamps = []
+
+
     def server_connection(self):
         """Establish a connection to the PyBullet GUI"""
-        self.client_id = p.connect(p.GUI)  # Will return a client ID
+        client_id = p.connect(p.GUI)  # Will return a client ID
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
-        self.client.append(self.client_id)  # Adding in the list
-        return self.client_id
+        self.client.append(client_id)  # Adding in the list
+        self.get_logger().info(f"The Client_id is : {client_id}")
+        return client_id
 
     def create_servers(self, number_of_servers):
         """Create multiple PyBullet physics servers. """
@@ -134,6 +156,11 @@ class SimulationNode(Node):
                                     enableConeFriction=enable_cone_friction,
                                     deterministicOverlappingPairs=overlapping_pairs,
                                     physicsClientId=client_id)        
+
+
+        ##verfiy the physics parameters
+        physics_params = p.getPhysicsEngineParameters(physicsClientId = client_id)
+        self.get_logger().info(f"physics Parameters : {physics_params}")
 
     def create_robot(self, client_id):
         self.get_logger().info("Loading plane URDF...")
@@ -169,7 +196,7 @@ class SimulationNode(Node):
         link_collision_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[d / 2 for d in self.structure_config['pedestal']['dimensions']])
         link_mass = self.structure_config['pedestal']['mass']
 
-        vsr_id = p.createMultiBody(
+        robot_id = p.createMultiBody(
             baseMass=self.structure_config['world_box']['mass'],
             baseCollisionShapeIndex=world_box_shape['collision'],
             baseVisualShapeIndex=world_box_shape['visual'],
@@ -186,11 +213,11 @@ class SimulationNode(Node):
             linkJointAxis=[[1, 0, 0]], 
             physicsClientId=client_id
         )
-        self.get_logger().info(f"Pedestal with prismatic joint created with ID: {vsr_id}")
+        self.get_logger().info(f"Pedestal with prismatic joint created with ID: {robot_id}")
 
         
         p.changeDynamics(
-            vsr_id, 1,
+            robot_id, 1,
             restitution=self.dynamics_config['pedestal']['restitution'],
             lateralFriction=self.dynamics_config['pedestal']['lateralFriction'],
             spinningFriction=self.dynamics_config['pedestal']['spinningFriction'],
@@ -202,75 +229,87 @@ class SimulationNode(Node):
 
       
 
-        self.vsr_id = vsr_id
+        # Get and log the initial position of the pedestal
+        initial_position_state, initial_orientation_state = p.getBasePositionAndOrientation(robot_id, physicsClientId=client_id)
+        self.get_logger().info(f"Initial position of the pedestal: {initial_position_state}, Initial orientation: {initial_orientation_state}")
 
-        # Capture the initial link state
-        self.initial_link_state = p.getLinkState(self.vsr_id, 0, physicsClientId=self.client_id)
-        self.get_logger().info(f"Initial link state: {self.initial_link_state}")
-
-
+        return robot_id
+    
     def execute_trajectory_callback(self, goal_handle):
         '''Execute the trajectory from the data received'''
-        self.get_logger().info("Executing trajectory callback...")
+        self.logger.info("Executing trajectory callback...")
 
+        client_id = goal_handle.request.client_id
+        robot_id = goal_handle.request.robot_id
         positions = goal_handle.request.position_list
         velocities = goal_handle.request.velocity_list
         timestamps = goal_handle.request.timestamp_list
 
-        
         if not (len(positions) == len(velocities) == len(timestamps)):
-            self.get_logger().error("Length of positions, velocities, and timestamps must be equal.")
+            self.logger.error("Length of positions, velocities, and timestamps must be equal.")
             goal_handle.abort()
             return TrajectoryAction.Result(success=False)
+        
+        self.get_logger().info(f"Length of the trajectory: {len(positions)}")
+        time_step = self.engine_settings['timestep']
 
-        # Initial delay before the first control command
-        time.sleep(timestamps[0])
+        last_time = time.time()
 
-         # Loop through each point in the trajectory
-        for i in range(1, len(timestamps)):
-            delta_t = timestamps[i] - timestamps[i - 1]
-            pre_control_joint_state = p.getJointState(self.vsr_id, 0, physicsClientId=self.client_id)
-            self.get_logger().info(f"Pre-control joint state: {pre_control_joint_state}")
+        self.actual_positions = []
+        self.actual_velocities = []
 
-          
+        for i in range(len(timestamps)):
+            self.desired_positions.append(positions[i])
+            self.desired_velocities.append(velocities[i])
+            self.timestamps.append(timestamps[i])
+
+            self.desired_position_publisher.publish(Float64(data=positions[i]))
+            self.desired_velocity_publisher.publish(Float64(data=velocities[i]))
+
+            # Simulate the joint control
             p.setJointMotorControl2(
-                bodyUniqueId=self.vsr_id,
-                jointIndex=0,  
+                bodyUniqueId=robot_id,
+                jointIndex=0,
                 controlMode=p.POSITION_CONTROL,
                 targetPosition=positions[i],
                 targetVelocity=velocities[i],
-                force=10000,  
-                physicsClientId=self.client_id
+                force=1000000,
+                physicsClientId=client_id
             )
 
-            # Step the simulation
-            p.stepSimulation(physicsClientId=self.client_id)
+            p.stepSimulation(physicsClientId=client_id)
 
-            # Wait for delta_t seconds before proceeding to the next step
-            time.sleep(delta_t)
+            # Capture the actual joint state
+            joint_state = p.getJointState(robot_id, 0, physicsClientId=client_id)
+            actual_position, actual_velocity = joint_state[0], joint_state[1]
 
-            # Get joint state after control
-            post_control_joint_state = p.getJointState(self.vsr_id, 0, physicsClientId=self.client_id)
-            self.get_logger().info(f"Post-control joint state: {post_control_joint_state}")
+            
 
-            # Send feedback
-            feedback_msg = TrajectoryAction.Feedback()
-            feedback_msg.current_position = post_control_joint_state[0]
-            feedback_msg.current_velocity = post_control_joint_state[1]
-            goal_handle.publish_feedback(feedback_msg)
+            self.actual_positions.append(actual_position)
+            self.actual_velocities.append(actual_velocity)
+
+            # Publish the actual position and velocity
+            self.postion_publisher.publish(Float64(data=actual_position))
+            self.velocity_publisher.publish(Float64(data=actual_velocity))
+
+          
+            current_time = time.time()
+            delta_t = current_time - last_time
+            if time_step > delta_t:
+                time.sleep(time_step - delta_t)
+            last_time = current_time
+
+        self.get_logger().info(f"Final actual positions: {self.actual_positions}")
+        self.get_logger().info(f"Final actual velocities: {self.actual_velocities}")
 
         self.get_logger().info("Trajectory execution completed successfully.")
-        goal_handle.succeed()  
-        
-        
-        final_link_state = p.getLinkState(self.vsr_id, 0, physicsClientId=self.client_id)
-        self.get_logger().info(f"Final link state: {final_link_state}")
+        goal_handle.succeed()
+        result = TrajectoryAction.Result()
+        result.success = True
+        result.actual_positions = self.actual_positions
+        result.actual_velocities = self.actual_velocities
+        return result
 
-        
-       
-        return TrajectoryAction.Result(success=True)
-
-   
 
     def disconnect(self):
         """Disconnect all the clients"""
@@ -280,16 +319,14 @@ class SimulationNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     simulation_node = SimulationNode()
-    simulation_node.get_logger().set_level(rclpy.logging.LoggingSeverity.DEBUG)
     simulation_node.server_connection()  # Connect GUI for visualization
-    simulation_node.create_servers(2)
+    simulation_node.create_servers(1)
     simulation_node.setup_simulation(simulation_node.client[0])
     simulation_node.create_robot(simulation_node.client[0])
-
     rclpy.spin(simulation_node)
     rclpy.shutdown()
-
     simulation_node.disconnect()
+
 
 if __name__ == '__main__':
     main()
