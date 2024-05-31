@@ -1,15 +1,15 @@
-# goal 
+# goal
+int32 client_id
+int32 robot_id
 float64[] position_list
 float64[] velocity_list
 float64[] timestamp_list
 ---
-# result 
+# result
 bool success
-
+float64[] actual_positions
+float64[] actual_velocities
 ---
-#feedback 
+# feedback
 float64 current_position
 float64 current_velocity
-
-
-

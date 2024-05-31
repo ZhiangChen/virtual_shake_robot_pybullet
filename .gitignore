@@ -167,3 +167,4 @@ log/
 .vscode/settings.json
 launch/install
 launch/log
+src/example.py
