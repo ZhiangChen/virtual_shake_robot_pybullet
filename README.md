@@ -49,10 +49,44 @@ print(pb.__version__)
  source ~/install/setup.bash
 
  ```
- 3 . Run the simulation_node.py using the launch file to launch the pybullet GUI for the VSR Structure.
+ 3 . Run the simulation_node.py for the pedestal mesh file using the launch file to launch the pybullet GUI for the VSR Structure.
 
  ```
  ros2 launch virtual_shake_robot_pybullet node.launch.py
 
  ```
+
+ 4 . For the box pedestal you need to launch the box_launch.py  it launches the control_node as well with it
+
+ ```
+ ros2 launch virtual_shake_robot_pybullet box_launch.py
+
+ ```
+ 5 . The action server in the control_node.py accpets Amplitude[A] and Frequency[F] values that are needed to determine the single_pulse consine motion for the pedestal
+
+ ```
+ ros2 run virtual_shake_robot_pytbullet 2.0 1.0
+
+ ```
+ This will send the A and F values for the motion of the pedestal to the control_node.py that will generate the trajectory of the pedestal.
+
+ Using the A and F values we use this formula to calculate the target postions, velocity for the pedestal and the acceleration required for the pedestal
+
+
+ ```
+   pulse motion
+        displacement function: d = -A*cos(2*pi*F*t) + A
+        velocity function: v = 2*pi*A*F*sin(2*pi*F*t)
+        acceleration function: a = 4*pi^2*F^2*A*cos(2*pi*F*t)
+```
+This values are calucalted and send as an goal using an action message for the Trajectory in the [TrajectoryAction.action](action/TrajectoryAction.action)
+
+
+Then in the simulation_node these values are used in the inbuilt API of the pybullet GUI setJointMotorControl2 
+
+For further details about the calculation refer the tutorial [Inertia.md](docs/Inertia.md)
+
+
+
+
  

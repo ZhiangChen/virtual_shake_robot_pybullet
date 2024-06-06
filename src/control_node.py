@@ -25,7 +25,8 @@ class ControlNode(Node):
         self.get_logger().info("ControlNode initialized and action server started.")
         self.client_id = 0
         self.robot_id = 2
-
+        self.current_position = 0.0
+        self.current_velocity = 0.0
         # Add attributes to store trajectory data
         self.timestamps = []
         self.positions = []
@@ -39,14 +40,39 @@ class ControlNode(Node):
 
         self.get_logger().info(f'Received Amplitude: {self.amplitude} and Frequency: {self.frequency}')
 
-        # Calculate trajectory and send it
-        self.calculate_and_send_trajectory()
+        #Reset Trajectory if the Amplitude and Frequency are zero 
+
+        if self.amplitude == 0 or self.frequency == 0:
+            self.get_logger().info("Resetting the Pedestal to the base position")
+            self.reset_trajectory()
+
+        else:
+            # Calculate trajectory and send it
+            self.calculate_and_send_trajectory()
 
         goal_handle.succeed()
 
         result = AF.Result()
         result.success = True
         return result
+
+
+    def reset_trajectory(self):
+        '''resetting the trajectory if the amplitude and frequency are zero'''
+
+        current_pose = self.get_current_pose()
+        positions, velocities, timestamps = self.generate_reset_trajectory(current_pose)
+        self.send_trajectory_goal(positions, velocities, timestamps)
+        
+    def get_current_pose(self):
+        """Get the current pose from the feedback."""
+        return self.current_position
+        
+    def feedback_callback(self,feedback_msg):
+
+        self.current_position = feedback_msg.feedback.current_position
+        self.current_velocity = feedback_msg.feedback.current_velocity
+        self.get_logger().info(f"Current Position: {self.current_position}, Current Velocity: {self.current_velocity}")
 
     def calculate_and_send_trajectory(self):
         positions, velocities, timestamps = self.generate_trajectory()
@@ -129,6 +155,24 @@ class ControlNode(Node):
         else:
             self.get_logger().error("Trajectory action failed!")
 
+    def feedback_callback(self,feedback_msg):
+
+        self.current_position = feedback_msg.current_postion
+        self.current_velocity = feedback_msg.cuurent_velocity
+
+    def generate_reset_trajectory(self, start_pose):
+
+        """Generate a reset trajectory from the current pose to the start position (0)."""
+        T = 1.0  # Total duration for reset, you can adjust as needed
+        num_samples = int(self.control_frequency * T)
+        t = np.linspace(0, T, num_samples)
+        positions = (start_pose / 2) * (1 - np.cos(np.pi * t / T))
+        velocities = (start_pose * np.pi / T) * np.sin(np.pi * t / T)
+        timestamps = t.tolist()
+        positions = positions.tolist()
+        velocities = velocities.tolist()
+
+        return positions, velocities, timestamps
 
     
 

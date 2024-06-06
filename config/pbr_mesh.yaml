@@ -1,0 +1,13 @@
+simulation_node:
+  ros__parameters:
+    rock_structure:
+      mesh: '/home/akshay/mesh files/closed_pbr.obj'
+      meshScale: [1.0, 1.0, 1.0]
+      mass: 5000.0
+      inertia: [541.67, 416.67, 208.33]  
+      restitution: 0.1
+      lateralFriction: 0.5
+      spinningFriction: 0.3
+      rollingFriction: 0.3
+      contactDamping: 0.1
+      contactStiffness: 1000.0

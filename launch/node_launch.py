@@ -11,13 +11,15 @@ def generate_launch_description():
     physics_engine_parameters_path = os.path.join(config_directory, 'physics_engine_parameters.yaml')
     physics_parameters_path = os.path.join(config_directory, 'physics_parameters.yaml')
     vsr_structure_path = os.path.join(config_directory, 'vsr_structure.yaml')
+    pbr_structure_path = os.path.join(config_directory, 'pbr_physics.yaml')
+    
 
     simulation_node = Node(
         package='virtual_shake_robot_pybullet',  
         executable='simulation_node.py',  
         name='simulation_node', 
         output='screen' ,
-        parameters= [physics_engine_parameters_path,physics_parameters_path,vsr_structure_path]
+        parameters= [physics_engine_parameters_path,physics_parameters_path,vsr_structure_path,pbr_structure_path]
     )
 
     

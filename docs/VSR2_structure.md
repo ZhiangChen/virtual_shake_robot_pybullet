@@ -38,3 +38,7 @@ This project implements a robotics simulation framework using PyBullet and ROS2.
 - **Simulation Parameter File**: This file will contain  the parameters that will control the Physics Engine Settings, through (`setPhysicsEngineParameter`).
 
 This architecture facilitates detailed simulation and analysis of robotic systems, leveraging the power of ROS2 and PyBullet for comprehensive, realistic modeling.
+
+
+
+
