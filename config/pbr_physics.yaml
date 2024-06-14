@@ -1,0 +1,12 @@
+simulation_node:
+  ros__parameters:
+    rock_structure:
+      dimensions: [1.0, 2.0, 3.0]
+      mass: 16200.0
+      inertia: [17550.0, 13500.0, 6750.0]
+      restitution: 0.8
+      lateralFriction: 0.6
+      spinningFriction: 0.3
+      rollingFriction: 0.3
+      contactDamping: 0.2
+      contactStiffness: 1e+13

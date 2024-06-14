@@ -1,0 +1,9 @@
+# Goal
+string structure_name
+string structure_type
+---
+# Result
+bool success
+---
+# Feedback
+string status
