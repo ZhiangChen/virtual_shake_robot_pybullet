@@ -56,7 +56,7 @@ print(pb.__version__)
 
  ```
 
- 4 . For the box pedestal you need to launch the box_launch.py  it launches the control_node as well with it
+ 4 . For the box pedestal you need to launch the box_launch.py, which launches the control_node as well with it.
 
  ```
  ros2 launch virtual_shake_robot_pybullet box_launch.py
@@ -68,9 +68,9 @@ print(pb.__version__)
  ros2 run virtual_shake_robot_pytbullet 2.0 1.0
 
  ```
- This will send the A and F values for the motion of the pedestal to the control_node.py that will generate the trajectory of the pedestal.
+ This will send the A and F values for the motion of the pedestal to the control_node.py that generates the trajectory of the pedestal.
 
- Using the A and F values we use this formula to calculate the target postions, velocity for the pedestal and the acceleration required for the pedestal
+ Using the A and F values, we use this formula to calculate the target postions, velocity for the pedestal and the acceleration required for the pedestal
 
 
  ```
@@ -82,7 +82,7 @@ print(pb.__version__)
 This values are calucalted and send as an goal using an action message for the Trajectory in the [TrajectoryAction.action](action/TrajectoryAction.action)
 
 
-Then in the simulation_node these values are used in the inbuilt API of the pybullet GUI setJointMotorControl2 
+Then in the simulation_node these values are used in the built-in API of the pybullet GUI setJointMotorControl2 
 
 For further details about the calculation refer the tutorial [Inertia.md](docs/Inertia.md)
 

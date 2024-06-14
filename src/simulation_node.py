@@ -282,9 +282,19 @@ class SimulationNode(Node):
             physicsClientId=client_id
         )
 
+        # Ensure collision is enabled
+        p.setCollisionFilterGroupMask(robot_id, -1, collisionFilterGroup=1, collisionFilterMask=1)
+        self.get_logger().info(f"Collision filter set for pedestal with ID: {robot_id}")
+
+
+        # Enable collision rendering for debugging
+        p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1, physicsClientId=client_id)
+
+
         # Get and log the initial position of the pedestal
         initial_position_state, initial_orientation_state = p.getBasePositionAndOrientation(robot_id, physicsClientId=client_id)
         self.get_logger().info(f"Initial position of the pedestal: {initial_position_state}, Initial orientation: {initial_orientation_state}")
+
 
 
     def load_pbr_callback(self, goal_handle):
@@ -339,11 +349,11 @@ class SimulationNode(Node):
                 goal_handle.abort()
                 return LoadPBR.Result(success=False)
 
-            # Common position logic
-            world_box_height = self.structure_config['world_box']['dimensions'][2]
-            pedestal_height = self.structure_config['pedestal']['dimensions'][2]
+            # # Common position logic
+            # world_box_height = self.structure_config['world_box']['dimensions'][2]
+            # pedestal_height = self.structure_config['pedestal']['dimensions'][2]
 
-            rock_position = [0, 0, world_box_height / 2 + pedestal_height + rock_height / 2 + 0.01]
+            rock_position = [0, 0, 2.2]
             self.get_logger().info(f"Placing rock at position: {rock_position}")
 
             rock_id = p.createMultiBody(
@@ -435,6 +445,7 @@ class SimulationNode(Node):
             # Capture the actual joint state
             joint_state = p.getJointState(robot_id, 0, physicsClientId=client_id)
             actual_position, actual_velocity = joint_state[0], joint_state[1]
+
 
             
 
