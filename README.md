@@ -65,7 +65,7 @@ print(pb.__version__)
  5 . The action server in the control_node.py accpets Amplitude[A] and Frequency[F] values that are needed to determine the single_pulse consine motion for the pedestal
 
  ```
- ros2 run virtual_shake_robot_pytbullet 2.0 1.0
+ ros2 run virtual_shake_robot_pytbullet pulse_motion_client.py 2.0 1.0
 
  ```
  This will send the A and F values for the motion of the pedestal to the control_node.py that generates the trajectory of the pedestal.

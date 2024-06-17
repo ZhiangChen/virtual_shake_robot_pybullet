@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<robot name="pbr_mesh">
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1437.596"/> <!-- Mass in kilograms -->
+      <inertia ixx="260.473" ixy="-12.88" ixz="-83.689"
+               iyy="313.424" iyz="-26.81"
+               izz="134.045"/> <!-- Moments of inertia in kg*m^2 -->
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="file:///home/akshay/mesh_files/closed_pbr.obj" scale="1.0 1.0 1.0"/>
+      </geometry>
+      <material name="grey">
+        <color rgba="0.5 0.5 0.5 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="file:///home/akshay/mesh_files/closed_pbr.obj" scale="1.0 1.0 1.0"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>
