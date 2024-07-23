@@ -3,12 +3,18 @@ import rclpy
 import pybullet as p
 import pybullet_data
 import time
+import numpy as np
 import matplotlib.pyplot as plt
 from rclpy.node import Node
 from rclpy.action import ActionServer
 from virtual_shake_robot_pybullet.action import TrajectoryAction, LoadPBR
 from std_msgs.msg import Float64
-from geometry_msgs.msg import Twist, Vector3
+from std_msgs.msg import Header
+from geometry_msgs.msg import PoseStamped, Pose, Point, Quaternion
+from rclpy.service import Service
+from std_srvs.srv import Empty
+from std_srvs.srv import SetBool
+from virtual_shake_robot_pybullet.srv import ManageModel
 
 class SimulationNode(Node):
     def __init__(self):
@@ -26,25 +32,32 @@ class SimulationNode(Node):
             LoadPBR,
             'load_pbr_action',
             execute_callback=self.load_pbr_callback
-
         )
-        
+
         self.get_logger().info("Action server up and running!")
 
-        # Publishers for postion and velocity data in the  simuulation thread
-        self.postion_publisher = self.create_publisher(Float64, 'pedestal_postion_publisher', 10)
+        # Publishers for position and velocity data in the simulation thread
+        self.position_publisher = self.create_publisher(Float64, 'pedestal_position_publisher', 10)
         self.velocity_publisher = self.create_publisher(Float64, 'pedestal_velocity_publisher', 10)
 
-        # #desired state publisher
-
+        # Desired state publisher
         self.desired_position_publisher = self.create_publisher(Float64, 'desired_position_topic', 10)
         self.desired_velocity_publisher = self.create_publisher(Float64, 'desired_velocity_topic', 10)
+
+        # PBR rock state publisher
+        self.pbr_pose_publisher = self.create_publisher(PoseStamped, 'pbr_pose_topic', 10)
+
+
+        self._manage_model_service = self.create_service(ManageModel, 'manage_model', self.manage_model_callback)
+        
+
 
 
         # Declaring parameters
         self.declare_parameters(
             namespace="",
             parameters=[
+                ('simulation_node.engineSettings.model_wait_time', 2.0),
                 ('engineSettings.gravity', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('engineSettings.timeStep', rclpy.Parameter.Type.DOUBLE),
                 ('engineSettings.useSplitImpulse', rclpy.Parameter.Type.BOOL),
@@ -65,28 +78,32 @@ class SimulationNode(Node):
                 ('dynamics.pedestal.contactDamping', rclpy.Parameter.Type.DOUBLE),
                 ('dynamics.pedestal.contactStiffness', rclpy.Parameter.Type.DOUBLE),
                 ('structure.pedestal.mass', rclpy.Parameter.Type.DOUBLE),
-                ('structure.pedestal.inertia', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('structure.pedestal.dimensions', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('structure.pedestal.mesh', rclpy.Parameter.Type.STRING),
                 ('structure.pedestal.meshScale', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('structure.world_box.mass', rclpy.Parameter.Type.DOUBLE),
-                ('structure.world_box.inertia', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('structure.world_box.dimensions', rclpy.Parameter.Type.DOUBLE_ARRAY),
-                ('rock_structure.dimensions', rclpy.Parameter.Type.DOUBLE_ARRAY),
-                ('rock_structure.mass', rclpy.Parameter.Type.DOUBLE),
-                ('rock_structure.inertia', rclpy.Parameter.Type.DOUBLE_ARRAY),
-                ('rock_structure.restitution', rclpy.Parameter.Type.DOUBLE),
-                ('rock_structure.lateralFriction', rclpy.Parameter.Type.DOUBLE),
-                ('rock_structure.spinningFriction', rclpy.Parameter.Type.DOUBLE),
-                ('rock_structure.rollingFriction', rclpy.Parameter.Type.DOUBLE),
-                ('rock_structure.contactDamping', rclpy.Parameter.Type.DOUBLE),
-                ('rock_structure.contactStiffness', rclpy.Parameter.Type.DOUBLE),
-                ('rock_structure.mesh', rclpy.Parameter.Type.STRING),
-                ('rock_structure.meshScale', rclpy.Parameter.Type.DOUBLE_ARRAY),
-
+                ('rock_structure_box.dimensions', rclpy.Parameter.Type.DOUBLE_ARRAY),
+                ('rock_structure_box.mass', rclpy.Parameter.Type.DOUBLE),
+                ('rock_structure_box.restitution', rclpy.Parameter.Type.DOUBLE),
+                ('rock_structure_box.lateralFriction', rclpy.Parameter.Type.DOUBLE),
+                ('rock_structure_box.localInertiaDiagonal', rclpy.Parameter.Type.DOUBLE_ARRAY),
+                ('rock_structure_box.spinningFriction', rclpy.Parameter.Type.DOUBLE),
+                ('rock_structure_box.rollingFriction', rclpy.Parameter.Type.DOUBLE),
+                ('rock_structure_box.contactDamping', rclpy.Parameter.Type.DOUBLE),
+                ('rock_structure_box.contactStiffness', rclpy.Parameter.Type.DOUBLE),
+                ('rock_structure_mesh.mesh', rclpy.Parameter.Type.STRING),
+                ('rock_structure_mesh.meshScale', rclpy.Parameter.Type.DOUBLE_ARRAY),
+                ('rock_structure_mesh.mass', rclpy.Parameter.Type.DOUBLE),
+                ('rock_structure_mesh.restitution', rclpy.Parameter.Type.DOUBLE),
+                ('rock_structure_mesh.lateralFriction', rclpy.Parameter.Type.DOUBLE),
+                ('rock_structure_mesh.spinningFriction', rclpy.Parameter.Type.DOUBLE),
+                ('rock_structure_mesh.rollingFriction', rclpy.Parameter.Type.DOUBLE),
+                ('rock_structure_mesh.contactDamping', rclpy.Parameter.Type.DOUBLE),
+                ('rock_structure_mesh.contactStiffness', rclpy.Parameter.Type.DOUBLE),
             ])
-        # Retrieve parameters from the parameter server
 
+        # Retrieve parameters from the parameter server
         self.engine_settings = {
             'gravity': self.get_parameter('engineSettings.gravity').value,
             'timestep': self.get_parameter('engineSettings.timeStep').value,
@@ -119,60 +136,61 @@ class SimulationNode(Node):
         self.structure_config = {
             'pedestal': {
                 'mass': self.get_parameter('structure.pedestal.mass').value,
-                'inertia': self.get_parameter('structure.pedestal.inertia').value,
                 'dimensions': self.get_parameter('structure.pedestal.dimensions').value,
             },
             'world_box': {
                 'mass': self.get_parameter('structure.world_box.mass').value,
-                'inertia': self.get_parameter('structure.world_box.inertia').value,
                 'dimensions': self.get_parameter('structure.world_box.dimensions').value
             }
         }
 
-        # Retrieve rock structure parameters
-        self.rock_structure_config = {
-            'dimensions': self.get_parameter('rock_structure.dimensions').value,
-            'mass': self.get_parameter('rock_structure.mass').value,
-            'inertia': self.get_parameter('rock_structure.inertia').value,
-            'restitution': self.get_parameter('rock_structure.restitution').value,
-            'lateralFriction': self.get_parameter('rock_structure.lateralFriction').value,
-            'spinningFriction': self.get_parameter('rock_structure.spinningFriction').value,
-            'rollingFriction': self.get_parameter('rock_structure.rollingFriction').value,
-            'contactDamping': self.get_parameter('rock_structure.contactDamping').value,
-            'contactStiffness': self.get_parameter('rock_structure.contactStiffness').value,
-            'mesh': self.get_parameter('rock_structure.mesh').value,
-            'meshScale': self.get_parameter('rock_structure.meshScale').value,
-
+        # Retrieve rock structure parameters for both box and mesh
+        self.rock_structure_box_config = {
+            'dimensions': self.get_parameter('rock_structure_box.dimensions').value,
+            'mass': self.get_parameter('rock_structure_box.mass').value,
+            'restitution': self.get_parameter('rock_structure_box.restitution').value,
+            'lateralFriction': self.get_parameter('rock_structure_box.lateralFriction').value,
+            'spinningFriction': self.get_parameter('rock_structure_box.spinningFriction').value,
+            'rollingFriction': self.get_parameter('rock_structure_box.rollingFriction').value,
+            'contactDamping': self.get_parameter('rock_structure_box.contactDamping').value,
+            'contactStiffness': self.get_parameter('rock_structure_box.contactStiffness').value,
+            'localInertiaDiagonal': self.get_parameter('rock_structure_box.localInertiaDiagonal').value
         }
 
-        self.client = []
+        self.rock_structure_mesh_config = {
+            'mesh': self.get_parameter('rock_structure_mesh.mesh').value,
+            'meshScale': self.get_parameter('rock_structure_mesh.meshScale').value,
+            'mass': self.get_parameter('rock_structure_mesh.mass').value,
+            'restitution': self.get_parameter('rock_structure_mesh.restitution').value,
+            'lateralFriction': self.get_parameter('rock_structure_mesh.lateralFriction').value,
+            'spinningFriction': self.get_parameter('rock_structure_mesh.spinningFriction').value,
+            'rollingFriction': self.get_parameter('rock_structure_mesh.rollingFriction').value,
+            'contactDamping': self.get_parameter('rock_structure_mesh.contactDamping').value,
+            'contactStiffness': self.get_parameter('rock_structure_mesh.contactStiffness').value
+        }
+
+        self.client_id = self.server_connection()
 
         ## To store the values for the plot
-
         self.desired_positions = []
         self.desired_velocities = []
         self.actual_positions = []
         self.actual_velocities = []
         self.timestamps = []
 
-
         self.rock_id = None
+
+        self.setup_simulation()
+        self.create_robot()
 
     def server_connection(self):
         """Establish a connection to the PyBullet GUI"""
         client_id = p.connect(p.GUI)  # Will return a client ID
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
-        self.client.append(client_id)  # Adding in the list
         self.get_logger().info(f"The Client_id is : {client_id}")
         return client_id
 
-    def create_servers(self, number_of_servers):
-        """Create multiple PyBullet physics servers. """
-        for _ in  range(number_of_servers):
-            client = p.connect(p.DIRECT)
-            self.client.append(client)
-
-    def setup_simulation(self, client_id):
+    def setup_simulation(self):
         '''this helps to setup the simulation using the physics_engine parmeters file'''
         gravity = self.get_parameter('engineSettings.gravity').value
         print(f"Gravity retrived : {gravity}")
@@ -182,123 +200,194 @@ class SimulationNode(Node):
         split_impulse_threshold = self.get_parameter('engineSettings.splitImpulsePenetrationThreshold').value
         enable_cone_friction = self.get_parameter('engineSettings.enableConeFriction').value
         overlapping_pairs = self.get_parameter('engineSettings.deterministicOverlappingPairs').value
+       
 
         # Use these settings to configure the physics engine
-        p.setGravity(*gravity, physicsClientId=client_id)
-        print(f"Gravity set for the client {client_id}:{gravity}")
-        p.setTimeStep(time_step, physicsClientId=client_id)
+        p.setGravity(*gravity, physicsClientId=self.client_id)
+        print(f"Gravity set for the client {self.client_id}:{gravity}")
+        p.setTimeStep(time_step, physicsClientId=self.client_id)
         p.setPhysicsEngineParameter(numSolverIterations=num_solver_iterations,
                                     useSplitImpulse=use_split_impulse,
                                     splitImpulsePenetrationThreshold=split_impulse_threshold,
                                     enableConeFriction=enable_cone_friction,
                                     deterministicOverlappingPairs=overlapping_pairs,
-                                    physicsClientId=client_id)        
-
+                                    physicsClientId=self.client_id)        
 
         ##verfiy the physics parameters
-        physics_params = p.getPhysicsEngineParameters(physicsClientId = client_id)
+        physics_params = p.getPhysicsEngineParameters(physicsClientId=self.client_id)
         self.get_logger().info(f"physics Parameters : {physics_params}")
 
-    def create_robot(self, client_id):
-        self.get_logger().info("Loading plane URDF...")
-        p.loadURDF("plane.urdf", physicsClientId=client_id)
+    def manage_model_callback(self, request, response):
+        self.get_logger().info(f"manage_model_callback called with action: {request.action}")
+        model_wait_time = self.get_parameter('simulation_node.engineSettings.model_wait_time').value
+        time_step = self.engine_settings['timestep']
 
-        self.get_logger().info("Creating world box shape...")
-        world_box_shape = {
-            'collision': p.createCollisionShape(p.GEOM_BOX, halfExtents=[x / 2 for x in self.structure_config['world_box']['dimensions']]),
-            'visual': p.createVisualShape(p.GEOM_BOX, halfExtents=[x / 2 for x in self.structure_config['world_box']['dimensions']])
-        }
-        world_box_id = p.createMultiBody(baseMass=self.structure_config['world_box']['mass'],
-                                        baseCollisionShapeIndex=world_box_shape['collision'],
-                                        baseVisualShapeIndex=world_box_shape['visual'],
-                                        basePosition=[0, 0, self.structure_config['world_box']['dimensions'][2] / 2],
-                                        physicsClientId=client_id)
-        self.get_logger().info(f"World box created with ID: {world_box_id}")
+        if request.action == "spawn":
+            rock_urdf_path = "/home/akshay/ros2_ws/virtual_shake_robot_pybullet/models/double_rock_pbr/pbr_mesh.urdf"
+            rock_position = [0, 0, 3.3]  
+            model_id = p.loadURDF(rock_urdf_path, basePosition=rock_position, physicsClientId=self.client_id)
 
-        # Set dynamics parameters for the world box
-        p.changeDynamics(
-            world_box_id, -1,
-            localInertiaDiagonal=self.structure_config['world_box']['inertia'],
-            restitution=self.dynamics_config['world_box']['restitution'],
-            lateralFriction=self.dynamics_config['world_box']['lateralFriction'],
-            spinningFriction=self.dynamics_config['world_box']['spinningFriction'],
-            rollingFriction=self.dynamics_config['world_box']['rollingFriction'],
-            contactDamping=self.dynamics_config['world_box']['contactDamping'],
-            contactStiffness=self.dynamics_config['world_box']['contactStiffness'],
-            physicsClientId=client_id
-        )
-
-        try:
-            pedestal_mesh_path = self.get_parameter('structure.pedestal.mesh').value
-            mesh_scale = self.get_parameter('structure.pedestal.meshScale').value
-            if pedestal_mesh_path:
-                self.get_logger().info(f"Loading pedestal mesh from {pedestal_mesh_path}...")
-                pedestal_shape = {
-                    'collision': p.createCollisionShape(shapeType=p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=mesh_scale),
-                    'visual': p.createVisualShape(shapeType=p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=mesh_scale)
-                }
+            if model_id < 0:
+                response.success = False
+                response.message = "Failed to load the rock model."
             else:
-                raise rclpy.exceptions.ParameterUninitializedException()
-        except rclpy.exceptions.ParameterUninitializedException:
-            self.get_logger().info("No mesh file provided, creating pedestal as a box...")
-            pedestal_shape = {
-                'collision': p.createCollisionShape(p.GEOM_BOX, halfExtents=[d / 2 for d in self.structure_config['pedestal']['dimensions']]),
-                'visual': p.createVisualShape(p.GEOM_BOX, halfExtents=[d / 2 for d in self.structure_config['pedestal']['dimensions']], rgbaColor=[1, 0, 0, 1])
-            }
+                self.rock_id = model_id
+                response.success = True
+                response.message = f"Rock model loaded with ID: {self.rock_id}"
+                self.get_logger().info(response.message)  # Log the success message
 
-        self.get_logger().info("Creating and configuring pedestal with prismatic joint...")
-        link_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[d / 2 for d in self.structure_config['pedestal']['dimensions']], rgbaColor=[1, 0, 0, 1])
-        link_collision_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[d / 2 for d in self.structure_config['pedestal']['dimensions']])
-        link_mass = self.structure_config['pedestal']['mass']
+                # Wait after spawning the model
+                self.get_logger().info(f'Waiting for {model_wait_time} seconds after model spawn.')
+                end_wait_time = time.time() + model_wait_time
+                while time.time() < end_wait_time:
+                    # Set joint control to keep position and velocity at zero
+                    p.setJointMotorControl2(
+                        bodyUniqueId=self.robot_id,
+                        jointIndex=0,
+                        controlMode=p.POSITION_CONTROL,
+                        targetPosition=0,
+                        targetVelocity=0,
+                        force=5 * 10**8,
+                        maxVelocity=200,
+                        physicsClientId=self.client_id
+                    )
+                    p.stepSimulation(physicsClientId=self.client_id)
+                    time.sleep(time_step)
 
-        robot_id = p.createMultiBody(
-            baseMass=self.structure_config['world_box']['mass'],
-            baseCollisionShapeIndex=world_box_shape['collision'],
-            baseVisualShapeIndex=world_box_shape['visual'],
-            basePosition=[0, 0, self.structure_config['world_box']['dimensions'][2] / 2],
-            linkMasses=[link_mass],
-            linkCollisionShapeIndices=[link_collision_shape],
-            linkVisualShapeIndices=[link_visual_shape],
-            linkPositions=[[0, 0, self.structure_config['world_box']['dimensions'][2] / 2 + self.structure_config['pedestal']['dimensions'][2] / 2]],
-            linkOrientations=[[0, 0, 0, 1]],
-            linkInertialFramePositions=[[0, 0, 0]],
-            linkInertialFrameOrientations=[[0, 0, 0, 1]],
-            linkParentIndices=[0],
-            linkJointTypes=[p.JOINT_PRISMATIC],
-            linkJointAxis=[[1, 0, 0]], 
-            physicsClientId=client_id
+        elif request.action == "delete":
+            if self.rock_id is not None:
+                p.removeBody(self.rock_id, physicsClientId=self.client_id)
+                self.get_logger().info(f"Rock model with ID {self.rock_id} deleted successfully.")  # Log deletion
+                self.rock_id = None
+                response.success = True
+                response.message = "Rock model deleted successfully."
+            else:
+                response.success = False
+                response.message = "No rock model to delete."
+                self.get_logger().info(response.message)  # Log the failure message
+        else:
+            response.success = False
+            response.message = "Unknown action."
+            self.get_logger().info(response.message)  # Log the unknown action
+
+        return response
+
+
+
+
+    def create_robot(self):
+        self.get_logger().info("Loading plane URDF...")
+        plane_id = p.loadURDF("plane.urdf", physicsClientId=self.client_id)
+        self.get_logger().info(f"Plane loaded with ID: {plane_id}")
+
+        # Define the base of the shake table
+        base_collision_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[25, 7, 1])
+        base_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[25, 7, 1], rgbaColor=[1, 1, 0, 1])  # Yellow color
+
+        # Define the pedestal of the shake table
+        pedestal_collision_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[5, 5, 0.25])
+        pedestal_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[5, 5, 0.25], rgbaColor=[1, 0, 0, 1])  # Red color
+
+        # Create the base and pedestal as a single multi-body
+        base_position = [0, 0, 1.0]  # Base is positioned at z = 1.0
+        base_orientation = p.getQuaternionFromEuler([0, 0, 0])
+
+        link_masses = [self.structure_config['pedestal']['mass']]  # Use the mass from parameters
+        link_collision_shapes = [pedestal_collision_shape]
+        link_visual_shapes = [pedestal_visual_shape]
+        link_positions = [[0, 0, 1.25]]  
+        link_orientations = [p.getQuaternionFromEuler([0, 0, 0])]
+        link_inertial_frame_positions = [[0, 0, 0]]
+        link_inertial_frame_orientations = [p.getQuaternionFromEuler([0, 0, 0])]
+        indices = [0]
+        joint_types = [p.JOINT_PRISMATIC]
+        joint_axis = [[1, 0, 0]]  
+
+        base = p.createMultiBody(
+            baseMass=self.structure_config['world_box']['mass'],  # Use the mass from parameters
+            baseCollisionShapeIndex=base_collision_shape,
+            baseVisualShapeIndex=base_visual_shape,
+            basePosition=base_position,
+            baseOrientation=base_orientation,
+            linkMasses=link_masses,
+            linkCollisionShapeIndices=link_collision_shapes,
+            linkVisualShapeIndices=link_visual_shapes,
+            linkPositions=link_positions,
+            linkOrientations=link_orientations,
+            linkInertialFramePositions=link_inertial_frame_positions,
+            linkInertialFrameOrientations=link_inertial_frame_orientations,
+            linkParentIndices=indices,
+            linkJointTypes=joint_types,
+            linkJointAxis=joint_axis,
+            physicsClientId=self.client_id
         )
-        self.get_logger().info(f"Pedestal with prismatic joint created with ID: {robot_id}")
+
+        if base < 0:
+            self.get_logger().error("Failed to create the combined multi-body.")
+            return
+
+        self.robot_id = base
+        self.get_logger().info(f"Combined world box and pedestal created with ID: {self.robot_id}")
+
+        # Enable collision for the base
+        p.setCollisionFilterGroupMask(self.robot_id, -1, collisionFilterGroup=1, collisionFilterMask=1)
+        self.get_logger().info(f"Collision filter set for base link of robot ID: {self.robot_id}")
+
+        # Enable collision for the pedestal
+        p.setCollisionFilterGroupMask(self.robot_id, 0, collisionFilterGroup=1, collisionFilterMask=1)
+        self.get_logger().info(f"Collision filter set for pedestal link 0 of robot ID: {self.robot_id}")
+
+        # Verify the number of joints
+        num_joints = p.getNumJoints(self.robot_id, physicsClientId=self.client_id)
+        self.get_logger().info(f"Number of joints in the robot: {num_joints}")
+
+        if num_joints == 0:
+            self.get_logger().error("No joints found in the created robot.")
+            return
+
+        # Retrieve dynamics parameters
+        world_box_dynamics = self.dynamics_config['world_box']
+        pedestal_dynamics = self.dynamics_config['pedestal']
+
+        # Set dynamics parameters for the base and pedestal
+        p.changeDynamics(
+            self.robot_id, -1,
+            restitution=world_box_dynamics['restitution'],
+            lateralFriction=world_box_dynamics['lateralFriction'],
+            spinningFriction=world_box_dynamics['spinningFriction'],
+            rollingFriction=world_box_dynamics['rollingFriction'],
+            contactDamping=world_box_dynamics['contactDamping'],
+            contactStiffness=world_box_dynamics['contactStiffness'],
+            collisionMargin=0.01,
+            localInertiaDiagonal=[0,0,0],
+            physicsClientId=self.client_id
+        )
 
         p.changeDynamics(
-            robot_id, 1,
-            localInertiaDiagonal=self.structure_config['pedestal']['inertia'],
-            restitution=self.dynamics_config['pedestal']['restitution'],
-            lateralFriction=self.dynamics_config['pedestal']['lateralFriction'],
-            spinningFriction=self.dynamics_config['pedestal']['spinningFriction'],
-            rollingFriction=self.dynamics_config['pedestal']['rollingFriction'],
-            contactDamping=self.dynamics_config['pedestal']['contactDamping'],
-            contactStiffness=self.dynamics_config['pedestal']['contactStiffness'],
-            physicsClientId=client_id
+            self.robot_id, 0,  # Link index for the pedestal
+            restitution=pedestal_dynamics['restitution'],
+            lateralFriction=pedestal_dynamics['lateralFriction'],
+            spinningFriction=pedestal_dynamics['spinningFriction'],
+            rollingFriction=pedestal_dynamics['rollingFriction'],
+            contactDamping=pedestal_dynamics['contactDamping'],
+            contactStiffness=pedestal_dynamics['contactStiffness'],
+            collisionMargin=0.01,
+            localInertiaDiagonal=[1668333.33, 1668333.33, 3333333.33],
+            physicsClientId=self.client_id
         )
 
-        # Ensure collision is enabled
-        p.setCollisionFilterGroupMask(robot_id, -1, collisionFilterGroup=1, collisionFilterMask=1)
-        self.get_logger().info(f"Collision filter set for pedestal with ID: {robot_id}")
+        # Print joint info
+        for joint_index in range(num_joints):
+            joint_info = p.getJointInfo(self.robot_id, joint_index, physicsClientId=self.client_id)
+            self.get_logger().info(f"Joint {joint_index} info: {joint_info}")
 
-
-        # Enable collision rendering for debugging
-        p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1, physicsClientId=client_id)
-
-
-        # Get and log the initial position of the pedestal
-        initial_position_state, initial_orientation_state = p.getBasePositionAndOrientation(robot_id, physicsClientId=client_id)
-        self.get_logger().info(f"Initial position of the pedestal: {initial_position_state}, Initial orientation: {initial_orientation_state}")
-
-
+        # Print link state
+        for link_index in range(num_joints):
+            link_state = p.getLinkState(self.robot_id, link_index, physicsClientId=self.client_id)
+            self.get_logger().info(f"Link {link_index} state: {link_state}")
 
     def load_pbr_callback(self, goal_handle):
-        '''Load the Pbr callback function'''
+        '''Load the PBR callback function'''
 
         self.logger.info("Loading PBR structure...")
         structure_name = goal_handle.request.structure_name
@@ -311,73 +400,64 @@ class SimulationNode(Node):
             return LoadPBR.Result(success=False)
 
         try:
+            pedestal_height = 2.1 
             if structure_type == 'mesh':
-                rock_mesh_path = self.rock_structure_config['mesh']
-                rock_mesh_scale = self.rock_structure_config['meshScale']
-                rock_mass = self.rock_structure_config['mass']
-                rock_inertia = self.rock_structure_config['inertia']
-                rock_restitution = self.rock_structure_config['restitution']
-                rock_lateralFriction = self.rock_structure_config['lateralFriction']
-                rock_spinningFriction = self.rock_structure_config['spinningFriction']
-                rock_rollingFriction = self.rock_structure_config['rollingFriction']
-                rock_contactDamping = self.rock_structure_config['contactDamping']
-                rock_contactStiffness = self.rock_structure_config['contactStiffness']
+                # Load the URDF file
+                urdf_path = '/home/akshay/ros2_ws/virtual_shake_robot_pybullet/models/double_rock_pbr/pbr_mesh.urdf'
 
-                self.get_logger().info(f"Loading rock mesh from {rock_mesh_path}...")
-                collision_shape = p.createCollisionShape(shapeType=p.GEOM_MESH, fileName=rock_mesh_path, meshScale=rock_mesh_scale)
-                visual_shape = p.createVisualShape(shapeType=p.GEOM_MESH, fileName=rock_mesh_path, meshScale=rock_mesh_scale, rgbaColor=[0.5, 0.5, 0.5, 1])
-                rock_height = rock_mesh_scale[2]  
+                self.get_logger().info(f"Loading rock mesh from {urdf_path}...")
+                
+                rock_position = [0, 0, pedestal_height + 1.2] 
+
+                rock_id = p.loadURDF(urdf_path, rock_position, [0, 0, 0, 1], physicsClientId=self.client_id)
 
             elif structure_type == 'box':
-                rock_dimensions = self.rock_structure_config['dimensions']
-                rock_mass = self.rock_structure_config['mass']
-                rock_inertia = self.rock_structure_config['inertia']
-                rock_restitution = self.rock_structure_config['restitution']
-                rock_lateralFriction = self.rock_structure_config['lateralFriction']
-                rock_spinningFriction = self.rock_structure_config['spinningFriction']
-                rock_rollingFriction = self.rock_structure_config['rollingFriction']
-                rock_contactDamping = self.rock_structure_config['contactDamping']
-                rock_contactStiffness = self.rock_structure_config['contactStiffness']
+                # Retrieve parameters from parameter server
+                rock_dimensions = self.rock_structure_box_config['dimensions']
+                rock_mass = self.rock_structure_box_config['mass']
+                rock_restitution = self.rock_structure_box_config['restitution']
+                rock_lateralFriction = self.rock_structure_box_config['lateralFriction']
+                rock_spinningFriction = self.rock_structure_box_config['spinningFriction']
+                rock_rollingFriction = self.rock_structure_box_config['rollingFriction']
+                rock_contactDamping = self.rock_structure_box_config['contactDamping']
+                rock_contactStiffness = self.rock_structure_box_config['contactStiffness']
+                principal_moments = self.rock_structure_box_config['localInertiaDiagonal']
 
                 self.get_logger().info("Loading rock as a box...")
                 collision_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[d / 2 for d in rock_dimensions])
                 visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[d / 2 for d in rock_dimensions], rgbaColor=[0.5, 0.5, 0.5, 1])
                 rock_height = rock_dimensions[2]
 
+                rock_position = [0, 0, 4.5]
+
+                rock_id = p.createMultiBody(
+                    baseMass=rock_mass,
+                    baseCollisionShapeIndex=collision_shape,
+                    baseVisualShapeIndex=visual_shape,
+                    basePosition=rock_position,
+                    baseOrientation=[0, 0, 0, 1],  # No rotation for base
+                    physicsClientId=self.client_id
+                )
+
+                p.changeDynamics(
+                    rock_id, -1,
+                    restitution=rock_restitution,
+                    lateralFriction=rock_lateralFriction,
+                    spinningFriction=rock_spinningFriction,
+                    rollingFriction=rock_rollingFriction,
+                    contactDamping=rock_contactDamping,
+                    contactStiffness=rock_contactStiffness,
+                    localInertiaDiagonal=principal_moments,  
+                    physicsClientId=self.client_id
+                )
+
             else:
                 self.get_logger().error("Unknown rock structure type.")
                 goal_handle.abort()
                 return LoadPBR.Result(success=False)
 
-            # # Common position logic
-            # world_box_height = self.structure_config['world_box']['dimensions'][2]
-            # pedestal_height = self.structure_config['pedestal']['dimensions'][2]
-
-            rock_position = [0, 0, 2.2]
-            self.get_logger().info(f"Placing rock at position: {rock_position}")
-
-            rock_id = p.createMultiBody(
-                baseMass=rock_mass, 
-                baseCollisionShapeIndex=collision_shape,
-                baseVisualShapeIndex=visual_shape,
-                basePosition=rock_position,
-                physicsClientId=self.client[0]
-            )
-
             self.get_logger().info(f"Rock structure loaded with ID: {rock_id}")
             self.rock_id = rock_id
-
-            p.changeDynamics(
-                rock_id, -1,
-                localInertiaDiagonal=rock_inertia,
-                restitution=rock_restitution,
-                lateralFriction=rock_lateralFriction,
-                spinningFriction=rock_spinningFriction,
-                rollingFriction=rock_rollingFriction,
-                contactDamping=rock_contactDamping,
-                contactStiffness=rock_contactStiffness,
-                physicsClientId=self.client[0]
-            )
 
             feedback_msg.status = "Rock structure loaded successfully"
             goal_handle.publish_feedback(feedback_msg)
@@ -394,7 +474,6 @@ class SimulationNode(Node):
             goal_handle.abort()
             return LoadPBR.Result(success=False)
 
-
     def execute_trajectory_callback(self, goal_handle):
         '''Execute the trajectory from the data received'''
         self.logger.info("Executing trajectory callback...")
@@ -404,6 +483,7 @@ class SimulationNode(Node):
         positions = goal_handle.request.position_list
         velocities = goal_handle.request.velocity_list
         timestamps = goal_handle.request.timestamp_list
+        wait_time = goal_handle.request.wait_time
 
         feedback_msg = TrajectoryAction.Feedback()
 
@@ -415,12 +495,14 @@ class SimulationNode(Node):
         self.get_logger().info(f"Length of the trajectory: {len(positions)}")
         time_step = self.engine_settings['timestep']
 
-        last_time = time.time()
-
         self.actual_positions = []
         self.actual_velocities = []
 
+        loop_start_time = time.time()  # Record the start time of the loop
+
         for i in range(len(timestamps)):
+            iteration_start_time = time.time()  # Record the start time of this iteration
+
             self.desired_positions.append(positions[i])
             self.desired_velocities.append(velocities[i])
             self.timestamps.append(timestamps[i])
@@ -435,7 +517,7 @@ class SimulationNode(Node):
                 controlMode=p.POSITION_CONTROL,
                 targetPosition=positions[i],
                 targetVelocity=velocities[i],
-                force= 5 * 10**8,
+                force=5 * 10**8,
                 maxVelocity=200,
                 physicsClientId=client_id
             )
@@ -446,42 +528,67 @@ class SimulationNode(Node):
             joint_state = p.getJointState(robot_id, 0, physicsClientId=client_id)
             actual_position, actual_velocity = joint_state[0], joint_state[1]
 
-
-            
-
             self.actual_positions.append(actual_position)
             self.actual_velocities.append(actual_velocity)
 
             # Publish the actual position and velocity
-            self.postion_publisher.publish(Float64(data=actual_position))
+            self.position_publisher.publish(Float64(data=actual_position))
             self.velocity_publisher.publish(Float64(data=actual_velocity))
 
-
-
-             
-            #Feedback
-
+            # Feedback
             feedback_msg.current_position = actual_position
             feedback_msg.current_velocity = actual_velocity
             goal_handle.publish_feedback(feedback_msg)
-          
-            current_time = time.time()
-            delta_t = current_time - last_time
-            if time_step > delta_t:
-                time.sleep(time_step - delta_t)
-            last_time = current_time
+            
+            # Ensure each loop iteration takes approximately time_step seconds
+            iteration_end_time = time.time()
+            elapsed_time = iteration_end_time - iteration_start_time
+            sleep_time = time_step - elapsed_time
 
+            if sleep_time > 0:
+                time.sleep(sleep_time)
 
+        loop_end_time = time.time()  # Record the end time of the loop
+        total_execution_time = loop_end_time - loop_start_time  # Calculate the total execution time
+        self.get_logger().info(f"Total execution time: {total_execution_time} seconds")
+
+        # Wait for the specified wait time after the trajectory execution
+        self.get_logger().info(f"Waiting for {wait_time} seconds after trajectory completion.")
+        end_wait_time = time.time() + wait_time
+        while time.time() < end_wait_time:
+            p.stepSimulation(physicsClientId=client_id)
+            time.sleep(time_step)
+
+        # Get the position and orientation of the PBR
+        if self.rock_id is not None:
+            pbr_position, pbr_orientation = p.getBasePositionAndOrientation(self.rock_id, physicsClientId=client_id)
+
+            # Create a PoseStamped message
+            pose_msg = PoseStamped()
+            pose_msg.header.stamp = self.get_clock().now().to_msg()
+            pose_msg.header.frame_id = "world"
+
+            pose_msg.pose.position = Point(x=pbr_position[0], y=pbr_position[1], z=pbr_position[2])
+            pose_msg.pose.orientation = Quaternion(x=pbr_orientation[0], y=pbr_orientation[1], z=pbr_orientation[2], w=pbr_orientation[3])
+
+            # Publish the PoseStamped message
+            self.pbr_pose_publisher.publish(pose_msg)
+        else:
+            self.get_logger().error("rock_id is None, cannot get base position and orientation.")
+            goal_handle.abort()
+            return TrajectoryAction.Result(success=False)
+
+        
 
         # Check the joint information again to ensure max velocity is set
         joint_info = p.getJointInfo(robot_id, 0, physicsClientId=client_id)
-        self.get_logger().info(f"Updated joint information after trajectory execution: {joint_info}")
+        # self.get_logger().info(f"Updated joint information after trajectory execution: {joint_info}")
 
-        max_velocity = joint_info[11]  
-        self.get_logger().info(f"Updated maximum velocity of the joint after trajectory execution: {max_velocity}")
+        max_velocity = joint_info[11]
+        # self.get_logger().info(f"Updated maximum velocity of the joint after trajectory execution: {max_velocity}")
 
-        self.get_logger().info(f"Final actual positions: {self.actual_positions}")
-        self.get_logger().info(f"Final actual velocities: {self.actual_velocities}")
+        # self.get_logger().info(f"Final actual positions: {self.actual_positions}")
+        # self.get_logger().info(f"Final actual velocities: {self.actual_velocities}")
 
         self.get_logger().info("Trajectory execution completed successfully.")
         goal_handle.succeed()
@@ -494,20 +601,14 @@ class SimulationNode(Node):
 
     def disconnect(self):
         """Disconnect all the clients"""
-        for client in self.client:
-            p.disconnect(client)
+        p.disconnect(self.client_id)
 
 def main(args=None):
     rclpy.init(args=args)
     simulation_node = SimulationNode()
-    simulation_node.server_connection()  # Connect GUI for visualization
-    simulation_node.create_servers(1)
-    simulation_node.setup_simulation(simulation_node.client[0])
-    simulation_node.create_robot(simulation_node.client[0])
     rclpy.spin(simulation_node)
     rclpy.shutdown()
     simulation_node.disconnect()
-
 
 if __name__ == '__main__':
     main()

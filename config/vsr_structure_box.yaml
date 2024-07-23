@@ -1,0 +1,14 @@
+simulation_node:
+  ros__parameters:
+    structure:
+      world_box:
+        dimensions: [50.0, 14.0, 2.0]  
+        mass: 0.00
+        inertia : [0.0, 0.0, 0.0]
+
+      pedestal:
+        dimensions: [10.0, 10.0, 0.5]  
+        mass: 200000.0
+        inertia: [1668333.33, 1668333.33, 3333333.33]
+        
+        

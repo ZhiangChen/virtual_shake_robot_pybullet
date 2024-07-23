@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 class AFActionClient(Node):
     def __init__(self):
         super().__init__('af_action_client')
-        self._action_client = ActionClient(self, AF, 'set_amplitude_frequency')
+        self._action_client = ActionClient(self, AF, 'set_amplitude_frequency_manual')
 
     def send_goal(self, amplitude, frequency):
         goal_msg = AF.Goal()
@@ -46,8 +46,8 @@ class AFActionClient(Node):
         self.get_logger().info(f'Received feedback: {feedback_msg.feedback}')
 
     def sampleMotionParam(self):
-        PGA = np.linspace(0.01, 1.0, 50)
-        PGV_2_PGA = np.linspace(0.01, 1.0, 50)
+        PGA = np.linspace(0.1, 0.5, 3)
+        PGV_2_PGA = np.linspace(0.1, 0.5, 3)
         Fs = 1.0 / (2 * pi * PGV_2_PGA)
         FA_data = []
         for F in Fs:
@@ -69,17 +69,7 @@ def main(args=None):
     for F, A in FA_data:
         action_client.get_logger().info(f'Generated Frequency: {F}, Amplitude: {A}')
     
-    # Plot the data
-    F_values = FA_data[:, 0]
-    A_values = FA_data[:, 1]
-    plt.figure(figsize=(10, 6))
-    plt.scatter(F_values, A_values, s=10, color='blue')
-    plt.xlabel('Frequency (F)')
-    plt.ylabel('Amplitude (A)')
-    plt.title('Amplitude vs. Frequency')
-    plt.grid(True)
-    plt.show()
-    
+   
     # Send the command-line values as goals
     amplitude = float(sys.argv[1])
     frequency = float(sys.argv[2])

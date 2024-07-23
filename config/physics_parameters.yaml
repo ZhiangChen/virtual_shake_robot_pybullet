@@ -2,18 +2,18 @@ simulation_node:
   ros__parameters:
     dynamics:
       world_box:
-        restitution: 0.9
+        restitution: 0.5
         lateralFriction: 0.6
         spinningFriction: 0.5
         rollingFriction: 0.6
-        contactDamping: -1.0
-        contactStiffness: -1.0
+        contactDamping: 100000.0
+        contactStiffness: 1000000.0
       pedestal:
-        restitution: 0.9
+        restitution: 0.5
         lateralFriction: 0.6
         spinningFriction: 0.5
         rollingFriction: 0.6
-        contactDamping: -1.0
-        contactStiffness: -1.0
+        contactDamping: 100000.0
+        contactStiffness: 1000000.0
       
       

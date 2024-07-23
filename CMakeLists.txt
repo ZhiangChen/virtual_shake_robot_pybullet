@@ -13,10 +13,13 @@ find_package(action_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 
+
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/AF.action"
   "action/TrajectoryAction.action"
   "action/LoadPBR.action"
+  "srv/ManageModel.srv"
+  "action/RecordingAction.action"
   DEPENDENCIES builtin_interfaces std_msgs
 )
 
@@ -37,7 +40,8 @@ install(PROGRAMS
   src/simulation_node.py
   src/control_node.py
   src/pulse_motion_client.py
-  src/PBR_Loader.py
+  src/perception_node.py
+  src/pbr_loader.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
