@@ -1,0 +1,12 @@
+# Goal definition
+float64[] positions
+float64[] timestamps
+
+---
+# Result definition
+bool success
+
+---
+# Feedback definition
+float64 current_position
+float64 current_timestamp

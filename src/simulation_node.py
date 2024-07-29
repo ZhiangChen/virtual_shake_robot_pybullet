@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from rclpy.node import Node
 from rclpy.action import ActionServer
-from virtual_shake_robot_pybullet.action import TrajectoryAction, LoadPBR
+from virtual_shake_robot_pybullet.action import TrajectoryAction, LoadPBR, LoadDispl
 from std_msgs.msg import Float64
 from std_msgs.msg import Header
 from geometry_msgs.msg import PoseStamped, Pose, Point, Quaternion
@@ -32,6 +32,13 @@ class SimulationNode(Node):
             LoadPBR,
             'load_pbr_action',
             execute_callback=self.load_pbr_callback
+        )
+        self._load_displ_action_server = ActionServer(
+            self,
+            LoadDispl,
+            'load_displ_action',
+            execute_callback=self.execute_pose_trajectory_callback
+
         )
 
         self.get_logger().info("Action server up and running!")
@@ -101,6 +108,7 @@ class SimulationNode(Node):
                 ('rock_structure_mesh.rollingFriction', rclpy.Parameter.Type.DOUBLE),
                 ('rock_structure_mesh.contactDamping', rclpy.Parameter.Type.DOUBLE),
                 ('rock_structure_mesh.contactStiffness', rclpy.Parameter.Type.DOUBLE),
+    
             ])
 
         # Retrieve parameters from the parameter server
@@ -169,6 +177,7 @@ class SimulationNode(Node):
             'contactStiffness': self.get_parameter('rock_structure_mesh.contactStiffness').value
         }
 
+   
         self.client_id = self.server_connection()
 
         ## To store the values for the plot
@@ -182,6 +191,7 @@ class SimulationNode(Node):
 
         self.setup_simulation()
         self.create_robot()
+        self.spawn_pbr_on_pedestal()
 
     def server_connection(self):
         """Establish a connection to the PyBullet GUI"""
@@ -271,8 +281,7 @@ class SimulationNode(Node):
             self.get_logger().info(response.message)  # Log the unknown action
 
         return response
-
-
+    
 
 
     def create_robot(self):
@@ -386,6 +395,92 @@ class SimulationNode(Node):
             link_state = p.getLinkState(self.robot_id, link_index, physicsClientId=self.client_id)
             self.get_logger().info(f"Link {link_index} state: {link_state}")
 
+    def spawn_pbr_on_pedestal(self):
+        """Retrieve parameters and spawn the PBR model on top of the pedestal."""
+        try:
+            # Retrieve the pedestal height and PBR model parameters
+            pedestal_height = 2.1  # Example value, you can retrieve it from parameters if needed
+
+            if hasattr(self, 'rock_structure_mesh_config'):
+                urdf_path = self.rock_structure_mesh_config['mesh']
+                mesh_scale = self.rock_structure_mesh_config['meshScale']
+                mass = self.rock_structure_mesh_config['mass']
+                restitution = self.rock_structure_mesh_config['restitution']
+                lateralFriction = self.rock_structure_mesh_config['lateralFriction']
+                spinningFriction = self.rock_structure_mesh_config['spinningFriction']
+                rollingFriction = self.rock_structure_mesh_config['rollingFriction']
+                contactDamping = self.rock_structure_mesh_config['contactDamping']
+                contactStiffness = self.rock_structure_mesh_config['contactStiffness']
+
+                rock_position = [0, 0, pedestal_height + 1.0]
+
+                self.get_logger().info(f"Spawning PBR model from {urdf_path} at position {rock_position}")
+
+                rock_id = p.loadURDF(urdf_path, rock_position, [0, 0, 0, 1], globalScaling=mesh_scale[0], physicsClientId=self.client_id)
+
+                if rock_id < 0:
+                    self.get_logger().error("Failed to load the PBR model.")
+                    return False
+
+                self.rock_id = rock_id
+                self.get_logger().info(f"PBR model loaded with ID: {self.rock_id}")
+
+                p.changeDynamics(
+                    self.rock_id, -1,
+                    mass=mass,
+                    restitution=restitution,
+                    lateralFriction=lateralFriction,
+                    spinningFriction=spinningFriction,
+                    rollingFriction=rollingFriction,
+                    contactDamping=contactDamping,
+                    contactStiffness=contactStiffness,
+                    physicsClientId=self.client_id
+                )
+            else:
+                dimensions = self.rock_structure_box_config['dimensions']
+                mass = self.rock_structure_box_config['mass']
+                restitution = self.rock_structure_box_config['restitution']
+                lateralFriction = self.rock_structure_box_config['lateralFriction']
+                spinningFriction = self.rock_structure_box_config['spinningFriction']
+                rollingFriction = self.rock_structure_box_config['rollingFriction']
+                contactDamping = self.rock_structure_box_config['contactDamping']
+                contactStiffness = self.rock_structure_box_config['contactStiffness']
+                localInertiaDiagonal = self.rock_structure_box_config['localInertiaDiagonal']
+
+                rock_position = [0, 0, 4.5]
+                collision_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[d / 2 for d in dimensions])
+                visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[d / 2 for d in dimensions], rgbaColor=[0.5, 0.5, 0.5, 1])
+
+                rock_id = p.createMultiBody(
+                    baseMass=mass,
+                    baseCollisionShapeIndex=collision_shape,
+                    baseVisualShapeIndex=visual_shape,
+                    basePosition=rock_position,
+                    baseOrientation=[0, 0, 0, 1],
+                    physicsClientId=self.client_id
+                )
+
+                p.changeDynamics(
+                    rock_id, -1,
+                    restitution=restitution,
+                    lateralFriction=lateralFriction,
+                    spinningFriction=spinningFriction,
+                    rollingFriction=rollingFriction,
+                    contactDamping=contactDamping,
+                    contactStiffness=contactStiffness,
+                    localInertiaDiagonal=localInertiaDiagonal,
+                    physicsClientId=self.client_id
+                )
+
+            return True
+
+        except Exception as e:
+            self.get_logger().error(f"Error spawning PBR: {str(e)}")
+            return False
+
+
+
+
     def load_pbr_callback(self, goal_handle):
         '''Load the PBR callback function'''
 
@@ -402,8 +497,8 @@ class SimulationNode(Node):
         try:
             pedestal_height = 2.1 
             if structure_type == 'mesh':
-                # Load the URDF file
-                urdf_path = '/home/akshay/ros2_ws/virtual_shake_robot_pybullet/models/double_rock_pbr/pbr_mesh.urdf'
+                
+                urdf_path = self.rock_structure_mesh_config['mesh']
 
                 self.get_logger().info(f"Loading rock mesh from {urdf_path}...")
                 
@@ -473,6 +568,92 @@ class SimulationNode(Node):
             goal_handle.publish_feedback(feedback_msg)
             goal_handle.abort()
             return LoadPBR.Result(success=False)
+                
+
+
+    def execute_pose_trajectory_callback(self, goal_handle):
+        self.logger.info("Received LoadDispl action goal...")
+
+        positions = goal_handle.request.positions
+        timestamps = goal_handle.request.timestamps
+
+        feedback_msg = LoadDispl.Feedback()
+
+        # Initialize lists to store data for plotting
+        target_positions = []
+        actual_positions = []
+        simulation_timestamps = []
+
+        self.logger.info(f"Executing LoadDispl with {len(positions)} positions and {len(timestamps)} timestamps...")
+
+        start_time = time.time()
+
+        for i in range(len(positions)):
+            current_position = positions[i]
+            simulation_timestamps.append(timestamps[i])
+
+            # Simulate the joint control based on the position
+            p.setJointMotorControl2(
+                bodyUniqueId=self.robot_id,
+                jointIndex=0,
+                controlMode=p.POSITION_CONTROL,
+                targetPosition=current_position,
+                force=5 * 10**8,
+                maxVelocity=200,
+                physicsClientId=self.client_id
+            )
+
+            # Get the actual joint state after the step
+            joint_state = p.getJointState(self.robot_id, 0)
+            actual_position = joint_state[0]
+
+            # Store the positions for plotting
+            target_positions.append(current_position)
+            actual_positions.append(actual_position)
+
+            if i < len(timestamps) - 1:
+                # Calculate the time difference between the current and next timestamp
+                time_diff = timestamps[i + 1] - timestamps[i]
+                if time_diff <= 0:
+                    time_diff = 0.001
+            else:
+                # Manually set the timestep for the last element
+                time_diff = 0.001  
+
+            # Step the simulation forward by the calculated time difference
+            num_steps = int(time_diff / 0.001)
+            for _ in range(num_steps):
+                p.stepSimulation(physicsClientId=self.client_id)
+
+            
+            time.sleep(0.00078)  
+
+            # Capture feedback
+            feedback_msg.current_position = current_position
+            feedback_msg.current_timestamp = timestamps[i]
+            goal_handle.publish_feedback(feedback_msg)
+
+        end_time = time.time()
+        self.logger.info(f"Total execution time: {end_time - start_time} seconds")
+
+        self.logger.info("LoadDispl action execution completed.")
+
+        # Plot the results after the simulation is complete
+        plt.figure()
+        plt.plot(simulation_timestamps, target_positions, label='Target Position')
+        plt.plot(simulation_timestamps, actual_positions, '--', label='Actual Position')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Position')
+        plt.title('Target vs Actual Position')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+        goal_handle.succeed()
+        result = LoadDispl.Result()
+        result.success = True
+        return result
+
 
     def execute_trajectory_callback(self, goal_handle):
         '''Execute the trajectory from the data received'''

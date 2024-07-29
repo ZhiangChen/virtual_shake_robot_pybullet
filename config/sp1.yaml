@@ -1,0 +1,12 @@
+simulation_node:
+  ros__parameters:
+    rock_structure_mesh:
+      mesh: "/home/akshay/ros2_ws/virtual_shake_robot_pybullet/models/SP1_PBRmodel/sp1.urdf"
+      meshScale: [1.0, 1.0, 1.0]
+      mass: 353.802
+      restitution: 0.3
+      lateralFriction: 0.5
+      spinningFriction: 0.3
+      rollingFriction: 0.3
+      contactDamping: 100000.0
+      contactStiffness: 10000000.0

@@ -15,8 +15,8 @@ def generate_launch_description():
     physics_parameters_path = os.path.join(config_directory, 'physics_parameters.yaml')
     vsr_structure_path = os.path.join(config_directory, 'vsr_structure_box.yaml')
     pbr_structure_path = os.path.join(config_directory, 'pbr_box.yaml')
-    pbr_mesh_structure_path = os.path.join(config_directory, 'pbr_mesh.yaml')
-    urdf_file_path = os.path.join(ros2_ws, 'virtual_shake_robot_pybullet/models/pbr_mesh.urdf')
+    sp2_mesh_structure_path = os.path.join(config_directory, 'sp2.yaml')
+    urdf_file_path = os.path.join(ros2_ws, 'virtual_shake_robot_pybullet/models/SP2_PBRmodel/sp2.urdf')
 
     def replace_placeholders(file_path, placeholder, value):
         with open(file_path, 'r') as file:
@@ -30,8 +30,7 @@ def generate_launch_description():
     physics_parameters_content = replace_placeholders(physics_parameters_path, '{{ROS2_WS}}', ros2_ws)
     vsr_structure_content = replace_placeholders(vsr_structure_path, '{{ROS2_WS}}', ros2_ws)
     pbr_structure_content = replace_placeholders(pbr_structure_path, '{{ROS2_WS}}', ros2_ws)
-    pbr_mesh_content = replace_placeholders(pbr_mesh_structure_path, '{{ROS2_WS}}', ros2_ws)
-    
+    sp2_mesh_content = replace_placeholders(sp2_mesh_structure_path, '{{ROS2_WS}}', ros2_ws)
 
     temp_dir = os.path.join(os.path.dirname(__file__), 'temp')
     os.makedirs(temp_dir, exist_ok=True)
@@ -46,8 +45,7 @@ def generate_launch_description():
     physics_parameters_temp_path = write_temp_yaml(physics_parameters_content, 'physics_parameters.yaml')
     vsr_structure_temp_path = write_temp_yaml(vsr_structure_content, 'vsr_structure_box.yaml')
     pbr_structure_temp_path = write_temp_yaml(pbr_structure_content, 'pbr_box.yaml')
-    pbr_mesh_temp_path = write_temp_yaml(pbr_mesh_content, 'pbr_mesh.yaml')
-    
+    sp2_mesh_temp_path = write_temp_yaml(sp2_mesh_content, 'sp2.yaml')
 
     simulation_node = Node(
         package='virtual_shake_robot_pybullet',
@@ -59,7 +57,7 @@ def generate_launch_description():
             physics_parameters_temp_path,
             vsr_structure_temp_path,
             pbr_structure_temp_path,
-            pbr_mesh_temp_path,
+            sp2_mesh_temp_path,
             {'urdf_file': urdf_file_path}  # Adding URDF file path as a parameter
         ]
     )
@@ -70,9 +68,6 @@ def generate_launch_description():
         name='control_node',
         output='screen'
     )
-
-
-    
 
     return LaunchDescription([
         simulation_node,

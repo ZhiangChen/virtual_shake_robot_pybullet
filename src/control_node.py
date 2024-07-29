@@ -4,7 +4,7 @@ import time
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionServer, ActionClient
-from virtual_shake_robot_pybullet.action import TrajectoryAction, AF
+from virtual_shake_robot_pybullet.action import TrajectoryAction, AF, RecordingAction,LoadDispl
 from std_srvs.srv import Empty
 from math import pi
 import numpy as np
@@ -15,6 +15,7 @@ from geometry_msgs.msg import PoseStamped
 import transforms3d.euler as euler
 import threading
 from rclpy.executors import MultiThreadedExecutor
+from data_loader import DataLoader
 
 class ControlNode(Node):
     def __init__(self):
@@ -26,6 +27,9 @@ class ControlNode(Node):
         self.model_wait_time = self.declare_parameter('simulation_node.engineSettings.model_wait_time', 10).value
         self.control_frequency = 1.0 / self.time_step
         self._trajectory_action_client = ActionClient(self, TrajectoryAction, 'trajectory_action')
+        self._recording_action_client = ActionClient(self, RecordingAction, 'manage_recording')
+        self._displacement_action_client = ActionClient(self, LoadDispl, 'load_displ_action')
+
         self.ready_publisher = self.create_publisher(Bool, 'control_node_ready', 10)
         self._action_server = ActionServer(
             self,
@@ -33,6 +37,15 @@ class ControlNode(Node):
             'set_amplitude_frequency_manual',
             self.execute_callback
         )
+
+        # Initialize the DataLoader and load the data
+        self.data_loader = DataLoader(
+            excel_file_path='/home/akshay/ASU_ Shared_ Scans/Shake_ Table_ Response/Earthquake Records Info.xlsx',
+            folder_path='/home/akshay/ASU_ Shared_ Scans/Shake_ Table_ Response',
+            pickle_file_path='/home/akshay/ros2_ws/combined_data.pkl'
+        )
+
+        self.combined_data = self.data_loader.get_combined_data()
       
         self._manage_model_client = self.create_client(ManageModel, 'manage_model')
 
@@ -45,6 +58,7 @@ class ControlNode(Node):
         self.positions = []
         self.velocities = []
         self.latest_pose = None
+        self.experiment_thread = None
         self.toppling_data = []
 
         self.amplitude_list = []
@@ -60,9 +74,76 @@ class ControlNode(Node):
         #Subscriber for the pose topic
         self.create_subscription(PoseStamped, 'pbr_pose_topic', self.pbr_pose_callback, 10)
         
+        # Service to start the experiments
+        self.create_service(Empty, 'start_experiments', self.start_experiments_callback)
+
+        self.get_logger().info("Waiting for the start_experiments service to be called...")
+
+        self.test_numbers = list(range(11,705))
+        
+
+        # self.send_displacement_data(116)
+        self.run_continuous_experiments()
+
+
+    def send_displacement_data(self, test_no):
+        if test_no in self.combined_data:
+            test_data = self.combined_data[test_no]
+            self.get_logger().info(f"Data type of test_data: {type(test_data)}")
+            self.get_logger().info(f"Loaded data for Test No: {test_no}: {list(test_data.keys())[:10]}")
+
+            time_vs_displacement_df = test_data['Time vs Displacement']
+            self.get_logger().info(f"Time vs Displacement Data (first 10 rows):\n{time_vs_displacement_df.head(10)}")
+
+            timestamps = time_vs_displacement_df.iloc[:, 0].tolist()
+            self.get_logger().info(f"Timestamps (first 10): {timestamps[:10]}")
+            self.get_logger().info(f"Total timestamps: {len(timestamps)}")
+
+            positions = time_vs_displacement_df.iloc[:, 1].tolist()
+            self.get_logger().info(f"Sending displacement data for Test No: {test_no}")
+
+            displacement_goal = LoadDispl.Goal()
+            displacement_goal.positions = positions
+            displacement_goal.timestamps = timestamps
+
+            self._displacement_action_client.wait_for_server()
+            send_goal_future = self._displacement_action_client.send_goal_async(displacement_goal)
+
+            # Wait for the goal to be sent and accepted
+            rclpy.spin_until_future_complete(self, send_goal_future)
+
+            goal_handle = send_goal_future.result()
+
+            if not goal_handle.accepted:
+                self.get_logger().error('Goal rejected by trajectory action server.')
+                return False
+
+            # Now wait for the result
+            get_result_future = goal_handle.get_result_async()
+            rclpy.spin_until_future_complete(self, get_result_future)
+
+            result = get_result_future.result()
+
+            # Check the success attribute inside the result object
+            if result.result.success:
+                self.get_logger().info('Displacement action succeeded.')
+                return True
+            else:
+                self.get_logger().error('Displacement action failed.')
+                return False
+        else:
+            self.get_logger().error(f"Test data for Test No: {test_no} not found!")
+            return False
+
+
+
+                                
+
+    def start_experiments_callback(self, request, response):
+        self.get_logger().info("Starting experiments...")
         self.experiment_thread = threading.Thread(target=self.run_experiments)
         self.experiment_thread.start()
-
+        return response
 
     def pbr_pose_callback(self, msg):
         self.latest_pose = msg.pose
@@ -88,7 +169,15 @@ class ControlNode(Node):
             print("Frequency: {:.2f}, Amplitude: {:.6f}".format(pair[0], pair[1])) 
         return np.asarray(FA_data)
     
-  
+    def run_continuous_experiments(self):
+        for test_no in range(11, 706):  # Test numbers from 011 to 705
+            self.get_logger().info(f"Starting experiment on Test No: {test_no}")
+            success = self.send_displacement_data(test_no)
+            if success:
+                self.get_logger().info(f"Experiment on Test No: {test_no} completed successfully.")
+            else:
+                self.get_logger().error(f"Experiment on Test No: {test_no} failed or was not completed.")
+
 
     def run_experiments(self):
         self.spawn_initial_model()
@@ -101,6 +190,7 @@ class ControlNode(Node):
             self.get_logger().info(f'Starting experiment {idx + 1}/{len(FA_data)} with Amplitude: {self.amplitude}, Frequency: {self.frequency}')
 
             self.new_pose_received = False  # Reset the flag before sending the trajectory goal
+            self.send_recording_goal('start', A, F)
             self.calculate_and_send_trajectory()
 
             self.get_logger().info(f'Waiting for {self.wait_time + 5.0} seconds for trajectory to complete.')
@@ -123,10 +213,11 @@ class ControlNode(Node):
             else:
                 self.get_logger().warning(f"No pose received for experiment {idx + 1}")
 
+            
             self.delete_and_spawn_model()
 
         self.get_logger().info(f"Completed all {len(FA_data)} experiments")
-
+        self.send_recording_goal('stop', A, F)
 
 
 
@@ -164,6 +255,38 @@ class ControlNode(Node):
         result = AF.Result()
         result.success = True
         return result
+    
+
+    def send_recording_goal(self, command, pga, pgv):
+        self.get_logger().info(f"Sending recording goal: {command}, PGA: {pga}, PGV: {pgv}")
+        
+        recording_goal = RecordingAction.Goal()
+        recording_goal.command = command
+        recording_goal.pga = pga
+        recording_goal.pgv = pgv
+
+        if not self._recording_action_client.wait_for_server(timeout_sec=10.0):
+            self.get_logger().error("Recording action server not available after waiting")
+            return
+
+        send_goal_future = self._recording_action_client.send_goal_async(recording_goal)
+        send_goal_future.add_done_callback(self.recording_goal_response_callback)
+
+    def recording_goal_response_callback(self, future):
+        goal_handle = future.result()
+        if not goal_handle.accepted:
+            self.get_logger().error('Recording goal rejected by action server.')
+        else:
+            self.get_logger().info('Recording goal accepted by action server.')
+            get_result_future = goal_handle.get_result_async()
+            get_result_future.add_done_callback(self.recording_result_callback)
+
+    def recording_result_callback(self, future):
+        result = future.result().result
+        if result.success:
+            self.get_logger().info("Recording action succeeded!")
+        else:
+            self.get_logger().error("Recording action failed!")
 
 
     
@@ -392,23 +515,24 @@ class ControlNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = ControlNode()
-    
-    # Spin the main node in a separate thread to avoid blocking
-    main_executor = MultiThreadedExecutor()
-    main_executor.add_node(node)
-    main_thread = threading.Thread(target=main_executor.spin)
-    main_thread.start()
-    
-    # Wait for the experiment thread to complete
-    node.experiment_thread.join()
-    
-    # Shutdown the experiment executor
-    node.experiment_executor.shutdown()
-    
-    # Shutdown the main executor and ROS
-    main_executor.shutdown()
-    rclpy.shutdown()
+
+    # Create a MultiThreadedExecutor to allow callbacks to be processed in parallel
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
+
+    try:
+        # Keep the node running
+        rclpy.spin(node, executor=executor)
+    except KeyboardInterrupt:
+        node.get_logger().info('Keyboard interrupt detected. Shutting down.')
+    finally:
+        # Ensure proper shutdown
+        executor.shutdown()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
+
+
+
 
