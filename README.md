@@ -86,6 +86,45 @@ Then in the simulation_node these values are used in the built-in API of the pyb
 
 For further details about the calculation refer the tutorial [Inertia.md](docs/Inertia.md)
 
+## Spawning PBR on top of the pedestal 
+
+Now we have a good controller that can handle range of the A and F values, so we are ready for the spawning of the PBR, and carrying out the experiment.
+
+```
+ros2 run virtual_shake_robot_pybullet pbr_loader.py [box|mesh]
+```
+
+For the spwaning of the mesh file for the pbr you can type mesh in front of the command or for the box  you can type box 
+
+Both the properties for the mesh file and box are calucalted accurately the tutorial for calculating them from Fusion360 is present in [Inertia.md](docs/Inertia.md). Please refer that if you have any doubt for calculating the inetia values accurately for the mesh file(.obj).
+
+![Pbr mesh file on pedestal](docs/pbr.png)
+
+
+## Starting an continous experiment for an range of (A,F) values
+
+We have an function in the control node that will generate the will take in range of PGV and PGV/PGA values and generate A and F so we have designed a framework such that tthe experiment when you trigger it after intiating the control node will start the experiment.
+
+This is the ros2 standard service command to start  the experiment that will trigger the start  of the experiment continously.
+
+```
+
+ros2 service call /start_experiments std_srvs/srv/Empty
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -20,6 +20,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/LoadPBR.action"
   "srv/ManageModel.srv"
   "action/RecordingAction.action"
+  "action/LoadDispl.action"
   DEPENDENCIES builtin_interfaces std_msgs
 )
 
@@ -42,6 +43,7 @@ install(PROGRAMS
   src/pulse_motion_client.py
   src/perception_node.py
   src/pbr_loader.py
+  src/data_loader.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -1,5 +1,7 @@
 # Goal
 string command
+float64 pga
+float64 pgv
 ---
 # Result
 bool success

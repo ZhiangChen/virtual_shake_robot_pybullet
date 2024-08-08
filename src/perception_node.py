@@ -3,7 +3,7 @@ import os
 import time
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Bool, Float64
+from std_msgs.msg import Bool
 from virtual_shake_robot_pybullet.srv import ManageModel
 from virtual_shake_robot_pybullet.action import RecordingAction
 import numpy as np
@@ -19,31 +19,18 @@ class PerceptionNode(Node):
         super().__init__('perception_node')
         self.get_logger().info("Initializing Perception Node...")
 
-        # Set up subscriptions
+        # Set up subscription for pbr_pose
         self.pbr_pose_subscription = self.create_subscription(
             PoseStamped,
             'pbr_pose_topic',
             self.pbr_pose_callback,
             10
         )
-        self.pga_subscription = self.create_subscription(
-            Float64,
-            'pga_topic',
-            self.pga_callback,
-            10
-        )
-        self.pgv_subscription = self.create_subscription(
-            Float64,
-            'pgv_topic',
-            self.pgv_callback,
-            10
-        )
 
         self.recording = False
         self.trajectory = []
+        self.toppling_data = []
         self.latest_pose = None
-        self.latest_pga = None
-        self.latest_pgv = None
 
         # Set up ActionServer for recording management
         self._action_server = ActionServer(
@@ -60,28 +47,14 @@ class PerceptionNode(Node):
     def pbr_pose_callback(self, msg):
         self.latest_pose = msg.pose
         if self.recording:
-            self.record_data()
-
-    def pga_callback(self, msg):
-        self.latest_pga = msg.data
-        if self.recording:
-            self.record_data()
-
-    def pgv_callback(self, msg):
-        self.latest_pgv = msg.data
-        if self.recording:
-            self.record_data()
-
-    def record_data(self):
-        if self.latest_pose and self.latest_pga is not None and self.latest_pgv is not None:
-            time_stamp = self.get_clock().now().to_msg().sec + self.get_clock().now().to_msg().nanosec * 1e-9
-            position = self.latest_pose.position
-            orientation = self.latest_pose.orientation
+            # Append the pose information to the trajectory
+            time_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+            position = msg.pose.position
+            orientation = msg.pose.orientation
             self.trajectory.append([
                 time_stamp,
                 position.x, position.y, position.z,
-                orientation.x, orientation.y, orientation.z, orientation.w,
-                self.latest_pga, self.latest_pgv
+                orientation.x, orientation.y, orientation.z, orientation.w
             ])
 
     def goal_callback(self, goal_request):
@@ -93,10 +66,14 @@ class PerceptionNode(Node):
         return CancelResponse.ACCEPT
 
     def execute_callback(self, goal_handle: ServerGoalHandle):
+        pga = goal_handle.request.pga
+        pgv = goal_handle.request.pgv
+        self.get_logger().info(f"Received PGA: {pga}, PGV: {pgv}")
+
         if goal_handle.request.command == 'start':
             self.start_recording()
         elif goal_handle.request.command == 'stop':
-            self.stop_recording()
+            self.stop_recording(pga, pgv)
         goal_handle.succeed()
 
         result = RecordingAction.Result()
@@ -108,9 +85,9 @@ class PerceptionNode(Node):
         self.trajectory = []
         self.get_logger().info("Recording started...")
 
-    def stop_recording(self):
+    def stop_recording(self, pga, pgv):
         self.recording = False
-        self.get_logger().info("Recording stopped.")
+        self.get_logger().info(f"Recording stopped. PGA: {pga}, PGV: {pgv}")
 
         # Save the trajectory to a numpy file
         if self.trajectory:
