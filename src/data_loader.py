@@ -2,6 +2,8 @@
 import os
 import pandas as pd
 import pickle
+import numpy as np
+from scipy.signal import butter, filtfilt
 
 class DataLoader:
     def __init__(self, excel_file_path, folder_path, pickle_file_path):
@@ -10,6 +12,9 @@ class DataLoader:
         self.pickle_file_path = pickle_file_path
         self.scale_factor = 5.9797 * 10**-4  # Scale factor to convert voltage to inches
         self.inch_to_meter = 0.0254  # Conversion factor from inches to meters
+        self.sampling_interval = 0.001250  # Time step from the MATLAB code
+        self.sampling_frequency = 1 / self.sampling_interval  # Sampling frequency
+        self.filter_order = 3  # Filter order
 
         # Check if the pickle file exists
         if os.path.exists(self.pickle_file_path):
@@ -25,19 +30,36 @@ class DataLoader:
 
     def _load_txt_data(self, file_path):
         """Load the time vs displacement data from the text file."""
-        data = pd.read_csv(file_path, sep='\s+')  # Updated to use sep='\s+' as recommended
+        data = pd.read_csv(file_path, sep='\s+')
 
         # Extract time from the first column and displacement from the sixth column
         time_data = data.iloc[:, 0].tolist()  # Time is in the first column
         displacement_data = data.iloc[:, 5].tolist()  # Displacement is in the sixth column
 
-        # Convert displacement from voltage to meters
-        displacement_data = [d * self.scale_factor * self.inch_to_meter for d in displacement_data]
+        # Convert displacement from voltage to inches
+        displacement_data = [d * self.scale_factor for d in displacement_data]
+
+        # Apply bandpass filter
+        displacement_data_filtered = self._apply_bandpass_filter(displacement_data)
+
+        # Convert filtered displacement from inches to meters
+        displacement_data_filtered_meters = [d * self.inch_to_meter for d in displacement_data_filtered]
 
         return pd.DataFrame({
             'Time': time_data,
-            'Displacement': displacement_data
+            'Displacement': displacement_data_filtered_meters
         })
+
+    def _apply_bandpass_filter(self, data):
+        """Apply a Butterworth bandpass filter to the data."""
+        nyquist = 0.5 * self.sampling_frequency
+        low = 0.1 / nyquist
+        high = 25 / nyquist
+        b, a = butter(self.filter_order, [low, high], btype='band')
+        filtered_data = filtfilt(b, a, data)
+        # Bring displacement to zero at the start
+        filtered_data = filtered_data - filtered_data[0]
+        return filtered_data
 
     def _load_and_combine_data(self):
         """Combine data from Excel and corresponding text files."""
@@ -94,7 +116,6 @@ def main():
         print(f"PGV/PGA: {data['PGV/PGA']}")
         print(f"Scaled PGA: {data['Scaled PGA']}")
         print(f"Time vs Displacement Data:\n{data['Time vs Displacement'].head()}\n")
-
 
 if __name__ == '__main__':
     main()

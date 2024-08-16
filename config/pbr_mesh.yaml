@@ -1,12 +1,14 @@
 simulation_node:
   ros__parameters:
     rock_structure_mesh:
-      mesh: '/home/akshay/mesh_files/closed_pbr.obj'
+      mesh: '{{ROS2_WS}}/virtual_shake_robot_pybullet/models/double_rock_pbr/pbr_mesh.urdf'
       meshScale: [1.0, 1.0, 1.0]
-      mass: 1437.596
-      restitution: 0.3
-      lateralFriction: 0.5
+      mass: 0.105
+      restitution: 0.8
+      lateralFriction: 0.3
       spinningFriction: 0.3
       rollingFriction: 0.3
       contactDamping: 1.0
       contactStiffness: 100000.0
+      rock_position: [0.0, 0.0, 3.3]
+      
