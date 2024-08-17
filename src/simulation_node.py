@@ -104,6 +104,7 @@ class SimulationNode(Node):
                 ('rock_structure_box.rollingFriction', rclpy.Parameter.Type.DOUBLE),
                 ('rock_structure_box.contactDamping', rclpy.Parameter.Type.DOUBLE),
                 ('rock_structure_box.contactStiffness', rclpy.Parameter.Type.DOUBLE),
+                ('rock_structure_box.rock_position', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('rock_structure_mesh.mesh', rclpy.Parameter.Type.STRING),
                 ('rock_structure_mesh.meshScale', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('rock_structure_mesh.mass', rclpy.Parameter.Type.DOUBLE),
@@ -168,7 +169,8 @@ class SimulationNode(Node):
             'rollingFriction': self.get_parameter('rock_structure_box.rollingFriction').value,
             'contactDamping': self.get_parameter('rock_structure_box.contactDamping').value,
             'contactStiffness': self.get_parameter('rock_structure_box.contactStiffness').value,
-            'localInertiaDiagonal': self.get_parameter('rock_structure_box.localInertiaDiagonal').value
+            'localInertiaDiagonal': self.get_parameter('rock_structure_box.localInertiaDiagonal').value,
+            'rock_position' : self.get_parameter('rock_structure_box.rock_position').value
         }
 
         self.rock_structure_mesh_config = {
@@ -503,15 +505,14 @@ class SimulationNode(Node):
             return LoadPBR.Result(success=False)
 
         try:
-            pedestal_height = 2.1 
+            
             if structure_type == 'mesh':
                 
                 urdf_path = self.rock_structure_mesh_config['mesh']
 
                 self.get_logger().info(f"Loading rock mesh from {urdf_path}...")
                 
-                rock_position = [0, 0, pedestal_height+0.46]
-
+                rock_position = self.rock_structure_mesh_config['rock_position']
                 rock_id = p.loadURDF(urdf_path, rock_position, [0, 0, 0, 1], physicsClientId=self.client_id)
                
             elif structure_type == 'box':
@@ -529,9 +530,9 @@ class SimulationNode(Node):
                 self.get_logger().info("Loading rock as a box...")
                 collision_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[d / 2 for d in rock_dimensions])
                 visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[d / 2 for d in rock_dimensions], rgbaColor=[0.5, 0.5, 0.5, 1])
-                rock_height = rock_dimensions[2]
+                
 
-                rock_position = [0, 0, 4.5]
+                rock_position = self.rock_structure_box_config['rock_position']
 
                 rock_id = p.createMultiBody(
                     baseMass=rock_mass,
