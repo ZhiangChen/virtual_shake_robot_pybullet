@@ -23,7 +23,7 @@ class ControlNode(Node):
         self.new_pose_received  =False
         self.enable_plotting = self.declare_parameter('enable_plotting', False).value
         self.time_step = self.declare_parameter('simulation_node.engineSettings.timeStep', 0.001).value
-        self.wait_time = self.declare_parameter('simulation_node.engineSettings.wait_time', 5.0).value
+        self.wait_time = self.declare_parameter('simulation_node.engineSettings.wait_time', 10.0).value
         self.model_wait_time = self.declare_parameter('simulation_node.engineSettings.model_wait_time', 10).value
         self.control_frequency = 1.0 / self.time_step
         self._trajectory_action_client = ActionClient(self, TrajectoryAction, 'trajectory_action')
@@ -172,11 +172,93 @@ class ControlNode(Node):
     def run_continuous_experiments(self):
         for test_no in range(11, 706):  # Test numbers from 011 to 705
             self.get_logger().info(f"Starting experiment on Test No: {test_no}")
+
+            # Extract PGV, PGA, and PGV/PGA for the current test
+            if test_no in self.combined_data:
+                test_data = self.combined_data[test_no]
+                pgv_to_pga = test_data['PGV/PGA']
+                pga = test_data['Scaled PGA']
+
+                # Start recording with the extracted values
+                self.send_recording_goal('start', pga, pgv_to_pga)
+                self.get_logger().info(f"Started recording for Test No: {test_no} with PGA: {pga} and PGV/PGA: {pgv_to_pga}")
+            else:
+                self.get_logger().error(f"No data available for Test No: {test_no}. Skipping this test.")
+                continue
+
             success = self.send_displacement_data(test_no)
+
             if success:
-                self.get_logger().info(f"Experiment on Test No: {test_no} completed successfully.")
+                self.get_logger().info(f"Experiment on Test No: {test_no} displacement data sent successfully.")
+
+                # Reset the flag before waiting for a new pose
+                self.new_pose_received = False
+
+              
+
+                # Once the pose is received, process it
+                if self.latest_pose:
+                    self.get_logger().info(f"Processing pose for Test No: {test_no}: {self.latest_pose}")
+                    toppled = self.check_Toppled(self.latest_pose)
+                    self.plot_pgv_pga(pga, pgv_to_pga, toppled)
+                    if toppled:
+                        self.get_logger().info("The Rock has toppled.")
+                    else:
+                        self.get_logger().info("The rock has not toppled.")
+                else:
+                    self.get_logger().warning(f"No pose received for Test No: {test_no} after waiting.")
+
             else:
                 self.get_logger().error(f"Experiment on Test No: {test_no} failed or was not completed.")
+
+            
+            self.send_recording_goal('stop', pga, pgv_to_pga)
+            self.get_logger().info(f"Stopped recording for Test No: {test_no}.")
+
+            
+            self.get_logger().info(f"Completed Test No: {test_no}. Moving to the next test.")
+
+            
+            time.sleep(0.001)
+
+
+
+    def plot_pgv_pga(self, pga, pgv_to_pga, toppled):
+        PGV = pga * pgv_to_pga
+        PGA_g = pga / 9.807  
+
+        
+        if not plt.get_fignums():
+            plt.figure(figsize=(10, 5))
+            plt.xlabel('PGA_g')
+            plt.ylabel('PGV / PGA')
+            plt.title('Toppling Status')
+            plt.xlim(0, 0.6)
+            plt.ylim(0, 0.6)
+            plt.grid(True)
+            plt.show(block=False)
+
+       
+        legend = plt.gca().get_legend()
+        legend_texts = [text.get_text() for text in legend.get_texts()] if legend else []
+
+        
+        if toppled:
+            plt.scatter(PGA_g, pgv_to_pga, c='r', label='Toppled' if 'Toppled' not in legend_texts else "")
+        else:
+            plt.scatter(PGA_g, pgv_to_pga, c='b', marker="v", label='Not Toppled' if 'Not Toppled' not in legend_texts else "")
+
+        
+        if not legend:
+            plt.legend(loc='upper right')
+
+        # Refresh the plot
+        plt.draw()
+        plt.pause(0.05)
+        self.get_logger().info("PGV vs PGA plot updated.")
+
+
+
 
 
     def run_experiments(self):
@@ -328,19 +410,16 @@ class ControlNode(Node):
     def calculate_and_send_trajectory(self):
         self.get_logger().info(f'Calculating trajectory for Amplitude: {self.amplitude} and Frequency: {self.frequency}')
         positions, velocities, timestamps = self.generate_trajectory()
-        # self.get_logger().info(f'Generated Positions: {positions}')
-        # self.get_logger().info(f'Generated Velocities: {velocities}')
-        # self.get_logger().info(f'Generated Timestamps: {timestamps}')
         self.send_trajectory_goal(positions, velocities, timestamps)
 
     def generate_trajectory(self):
         T = 1.0 / self.frequency
         num_samples = int(self.control_frequency * T)
         t = np.linspace(0, T, num_samples)
-        positions = self.amplitude * np.cos(2 * np.pi * self.frequency * t) - self.amplitude
+        positions = -self.amplitude * np.cos(2 * np.pi * self.frequency * t) + self.amplitude
         positions = positions - positions[0]
         
-        velocities = -2 * np.pi * self.amplitude * self.frequency * np.sin(2 * np.pi * self.frequency * t)
+        velocities = 2 * np.pi * self.amplitude * self.frequency * np.sin(2 * np.pi * self.frequency * t)
         timestamps = t.tolist()
         positions = positions.tolist()
         velocities = velocities.tolist()

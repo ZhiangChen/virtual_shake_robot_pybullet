@@ -16,7 +16,9 @@ def generate_launch_description():
     vsr_structure_path = os.path.join(config_directory, 'vsr_structure_box.yaml')
     pbr_structure_path = os.path.join(config_directory, 'pbr_box.yaml')
     sp1_mesh_structure_path = os.path.join(config_directory, 'sp1.yaml')
-    urdf_file_path = os.path.join(ros2_ws, 'virtual_shake_robot_pybullet/models/SP1_PBRmodel/sp1.urdf')
+    
+    # Define URDF file path with a placeholder
+    urdf_file_path = os.path.join('{{ROS2_WS}}', 'virtual_shake_robot_pybullet/models/SP1_PBRmodel/sp1.urdf')
 
     def replace_placeholders(file_path, placeholder, value):
         with open(file_path, 'r') as file:
@@ -31,7 +33,9 @@ def generate_launch_description():
     vsr_structure_content = replace_placeholders(vsr_structure_path, '{{ROS2_WS}}', ros2_ws)
     pbr_structure_content = replace_placeholders(pbr_structure_path, '{{ROS2_WS}}', ros2_ws)
     sp1_mesh_content = replace_placeholders(sp1_mesh_structure_path, '{{ROS2_WS}}', ros2_ws)
-   
+    
+    # Replace placeholder in URDF file path
+    urdf_file_path_content = urdf_file_path.replace('{{ROS2_WS}}', ros2_ws)
 
     temp_dir = os.path.join(os.path.dirname(__file__), 'temp')
     os.makedirs(temp_dir, exist_ok=True)
@@ -59,7 +63,7 @@ def generate_launch_description():
             vsr_structure_temp_path,
             pbr_structure_temp_path,
             sp1_mesh_temp_path,
-            {'urdf_file': urdf_file_path}  # Adding URDF file path as a parameter
+            {'urdf_file': urdf_file_path_content}  # Using the updated URDF file path
         ]
     )
 
@@ -69,9 +73,6 @@ def generate_launch_description():
         name='control_node',
         output='screen'
     )
-
-
-    
 
     return LaunchDescription([
         simulation_node,

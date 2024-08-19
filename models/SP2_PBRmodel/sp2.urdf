@@ -4,14 +4,15 @@
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <mass value="353.46"/> <!-- Mass in kilograms -->
-      <inertia ixx="0.303" ixy="0.342" ixz="0.009"
-               iyy="0.386" iyz="-0.008"
-               izz="0.689"/> <!-- Moments of inertia in kg*m^2 -->
+      <inertia ixx="2.68327252" ixy="-0.20390423" ixz="-0.71127957"
+              iyy="2.29631331" iyz="-0.10071804"
+              izz="1.97878238"/> <!-- Moments of inertia in kg*m^2 -->
     </inertial>
+
     <visual>
       <origin xyz="-0.033 0.029 0.001" rpy="0 0 0"/> <!-- Adjusting the origin to the Center of Mass -->
       <geometry>
-        <mesh filename="file:///home/akshay/ros2_ws/virtual_shake_robot_pybullet/models/SP2_PBRmodel/SP2.obj" scale="1.0 1.0 1.0"/>
+        <mesh filename="file:///home/akshay/ros2_ws/virtual_shake_robot_pybullet/models/SP2_PBRmodel/final_sp2_1.obj" scale="1.0 1.0 1.0"/>
       </geometry>
       <material name="grey">
         <color rgba="0.5 0.5 0.5 1"/>
@@ -20,7 +21,7 @@
     <collision>
       <origin xyz="-0.033 0.029 0.001" rpy="0 0 0"/> <!-- Adjusting the origin to the Center of Mass -->
       <geometry>
-        <mesh filename="file:///home/akshay/ros2_ws/virtual_shake_robot_pybullet/models/SP2_PBRmodel/SP2.obj" scale="1.0 1.0 1.0"/>
+        <mesh filename="file:///home/akshay/ros2_ws/virtual_shake_robot_pybullet/models/SP2_PBRmodel/final_sp2_1.obj" scale="1.0 1.0 1.0"/>
       </geometry>
     </collision>
   </link>

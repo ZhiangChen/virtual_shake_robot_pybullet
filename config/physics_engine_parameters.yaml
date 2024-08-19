@@ -10,6 +10,6 @@ simulation_node:
       deterministicOverlappingPairs: 1
       numSubSteps: 10
       reset_time : 1.0      
-      wait_time : 5.0
+      wait_time : 10.0
       model_wait_time : 10.0
 

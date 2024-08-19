@@ -4,14 +4,15 @@
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <mass value="353.00"/> <!-- Mass in kilograms -->
-      <inertia ixx="0.163" ixy="-0.171" ixz="-3.391E-07"
-               iyy="0.178" iyz="-2.773E-07"
-               izz="0.342"/> <!-- Moments of inertia in kg*m^2 -->
+      <inertia ixx="2.61580915" ixy="-0.71203197" ixz="0.1928733"
+              iyy="1.93505054" iyz="0.10294264"
+              izz="2.27268579"/> <!-- Moments of inertia in kg*m^2 -->
     </inertial>
+    
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="file:///home/akshay/ros2_ws/virtual_shake_robot_pybullet/models/SP1_PBRmodel/SP1_az_1.obj" scale="1.0 1.0 1.0"/>
+        <mesh filename="package://virtual_shake_robot_pybullet/models/SP1_PBRmodel/final_sp1.obj" scale="1.0 1.0 1.0"/>
       </geometry>
       <material name="grey">
         <color rgba="0.5 0.5 0.5 1"/>
@@ -20,7 +21,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="file:///home/akshay/ros2_ws/virtual_shake_robot_pybullet/models/SP1_PBRmodel/SP1_az_1.obj" scale="1.0 1.0 1.0"/>
+        <mesh filename="package://virtual_shake_robot_pybullet/models/SP1_PBRmodel/final_sp1.obj" scale="1.0 1.0 1.0"/>
       </geometry>
     </collision>
   </link>
