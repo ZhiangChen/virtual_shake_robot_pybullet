@@ -2,10 +2,19 @@
 
 from launch import LaunchDescription
 from launch_ros.actions import Node
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 import os
 import yaml
 
 def generate_launch_description():
+    
+    # Declare the motion_mode argument
+    motion_mode_arg = DeclareLaunchArgument(
+        'motion_mode',
+        default_value='',
+        description='Motion mode for the control node: grid_cosine, single_recording, all_recordings'
+    )
     
     # Retrieve the ROS2 workspace path from the environment or use a default
     ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
@@ -77,14 +86,19 @@ def generate_launch_description():
         ]
     )
 
+    # Define the control node with motion_mode argument
     control_node = Node(
         package='virtual_shake_robot_pybullet',
         executable='control_node.py',
         name='control_node',
-        output='screen'
+        output='screen',
+        parameters=[
+            {'motion_mode': LaunchConfiguration('motion_mode')}
+        ]
     )
 
     return LaunchDescription([
+        motion_mode_arg,
         simulation_node,
         control_node    
     ])

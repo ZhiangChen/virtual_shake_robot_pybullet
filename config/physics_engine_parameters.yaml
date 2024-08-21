@@ -8,8 +8,7 @@ simulation_node:
       splitImpulsePenetrationThreshold: -0.04
       enableConeFriction: true
       deterministicOverlappingPairs: 1
-      numSubSteps: 10
-      reset_time : 1.0      
-      wait_time : 10.0
-      model_wait_time : 10.0
+      pedestal_reset_time : 1.0      
+      response_wait_time : 10.0
+      loading_wait_time : 10.0
 

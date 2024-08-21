@@ -61,6 +61,8 @@ class SimulationNode(Node):
         self.declare_parameter('realtime_flag', True)
 
         self.realtime_flag = self.get_parameter('realtime_flag').value
+        self.declare_parameter('enable_plotting', True)  # Declare as a ROS2 parameter
+        self.enable_plotting = self.get_parameter('enable_plotting').value
         
 
 
@@ -69,7 +71,7 @@ class SimulationNode(Node):
         self.declare_parameters(
             namespace="",
             parameters=[
-                ('simulation_node.engineSettings.model_wait_time', 2.0),
+                ('simulation_node.engineSettings.loading_wait_time', rclpy.Parameter.Type.DOUBLE),
                 ('engineSettings.gravity', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('engineSettings.timeStep', rclpy.Parameter.Type.DOUBLE),
                 ('engineSettings.useSplitImpulse', rclpy.Parameter.Type.BOOL),
@@ -94,6 +96,8 @@ class SimulationNode(Node):
                 ('structure.pedestal.mesh', rclpy.Parameter.Type.STRING),
                 ('structure.pedestal.meshScale', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('structure.world_box.mass', rclpy.Parameter.Type.DOUBLE),
+                ('structure.world_box.inertia', rclpy.Parameter.Type.DOUBLE_ARRAY), 
+                ('structure.pedestal.inertia', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('structure.world_box.dimensions', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('rock_structure_box.dimensions', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('rock_structure_box.mass', rclpy.Parameter.Type.DOUBLE),
@@ -152,10 +156,12 @@ class SimulationNode(Node):
             'pedestal': {
                 'mass': self.get_parameter('structure.pedestal.mass').value,
                 'dimensions': self.get_parameter('structure.pedestal.dimensions').value,
+                'inertia': self.get_parameter('structure.pedestal.inertia').value
             },
             'world_box': {
                 'mass': self.get_parameter('structure.world_box.mass').value,
-                'dimensions': self.get_parameter('structure.world_box.dimensions').value
+                'dimensions': self.get_parameter('structure.world_box.dimensions').value,
+                'inertia': self.get_parameter('structure.world_box.inertia').value
             }
         }
 
@@ -201,7 +207,7 @@ class SimulationNode(Node):
 
         self.setup_simulation()
         self.create_robot()
-        self.spawn_pbr_on_pedestal()
+        # self.spawn_pbr_on_pedestal()
 
     def server_connection(self):
         """Establish a connection to the PyBullet GUI"""
@@ -238,13 +244,14 @@ class SimulationNode(Node):
         self.get_logger().info(f"physics Parameters : {physics_params}")
 
     def manage_model_callback(self, request, response):
+        """Handles the model management service, allowing spawning and deletion of models."""
         self.get_logger().info(f"manage_model_callback called with action: {request.action}")
-        model_wait_time = self.get_parameter('simulation_node.engineSettings.model_wait_time').value
+        model_wait_time = self.get_parameter('simulation_node.engineSettings.loading_wait_time').value
         time_step = self.engine_settings['timestep']
 
         if request.action == "spawn":
             urdf_path = self.rock_structure_mesh_config['mesh']
-            rock_position = self.rock_structure_mesh_config['position']  
+            rock_position = self.rock_structure_mesh_config['rock_position']  
             model_id = p.loadURDF(urdf_path, basePosition=rock_position, physicsClientId=self.client_id)
 
             if model_id < 0:
@@ -290,31 +297,40 @@ class SimulationNode(Node):
             response.message = "Unknown action."
             self.get_logger().info(response.message)  # Log the unknown action
 
-        return response
-    
-
-
+   
     def create_robot(self):
-        self.get_logger().info("Loading plane URDF...")
+        """Creates the robot model in the PyBullet simulation based on the configuration."""
+        self.get_logger().info("Loading the VSR_shake_table...")
         plane_id = p.loadURDF("plane.urdf", physicsClientId=self.client_id)
         self.get_logger().info(f"Plane loaded with ID: {plane_id}")
 
-        # Define the base of the shake table
-        base_collision_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[25, 7, 1])
-        base_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[25, 7, 1], rgbaColor=[1, 1, 0, 1])  
+        # Define the base of the shake table using parameters from vsr_structure.yaml
+        world_box_dimensions = [dim / 2 for dim in self.structure_config['world_box']['dimensions']]  # Divide by 2 for halfExtents
+        base_collision_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=world_box_dimensions)
+        base_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=world_box_dimensions, rgbaColor=[1, 1, 0, 1])  
 
-        # Define the pedestal of the shake table
-        pedestal_collision_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[5, 5, 0.25])
-        pedestal_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[5, 5, 0.25], rgbaColor=[1, 0, 0, 1])  
-
-        # Create the base and pedestal as a single multi-body
+        # Create the base as a multi-body
         base_position = [0, 0, 1.0]  # Base is positioned at z = 1.0
         base_orientation = p.getQuaternionFromEuler([0, 0, 0])
 
+        # Check if we are using a mesh or a box for the pedestal
+        if 'mesh' in self.structure_config['pedestal']:
+            # Define the pedestal using a mesh
+            pedestal_mesh_path = self.structure_config['pedestal']['mesh']
+            pedestal_mesh_scale = self.structure_config['pedestal']['meshScale']
+            pedestal_collision_shape = p.createCollisionShape(p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=pedestal_mesh_scale)
+            pedestal_visual_shape = p.createVisualShape(p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=pedestal_mesh_scale, rgbaColor=[1, 0, 0, 1])
+        else:
+            # Define the pedestal using a box
+            pedestal_dimensions = [dim / 2 for dim in self.structure_config['pedestal']['dimensions']]  # Divide by 2 for halfExtents
+            pedestal_collision_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=pedestal_dimensions)
+            pedestal_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=pedestal_dimensions, rgbaColor=[1, 0, 0, 1])  
+
+        # Create the pedestal as a link to the base
         link_masses = [self.structure_config['pedestal']['mass']]  
         link_collision_shapes = [pedestal_collision_shape]
         link_visual_shapes = [pedestal_visual_shape]
-        link_positions = [[0, 0, 1.25]]  
+        link_positions = [[0, 0, 1.25]]  # Position pedestal on top of the base, as in the original setup
         link_orientations = [p.getQuaternionFromEuler([0, 0, 0])]
         link_inertial_frame_positions = [[0, 0, 0]]
         link_inertial_frame_orientations = [p.getQuaternionFromEuler([0, 0, 0])]
@@ -378,7 +394,7 @@ class SimulationNode(Node):
             contactDamping=world_box_dynamics['contactDamping'],
             contactStiffness=world_box_dynamics['contactStiffness'],
             collisionMargin=0.01,
-            localInertiaDiagonal=[0,0,0],
+            localInertiaDiagonal=[0, 0, 0],
             physicsClientId=self.client_id
         )
 
@@ -391,7 +407,7 @@ class SimulationNode(Node):
             contactDamping=pedestal_dynamics['contactDamping'],
             contactStiffness=pedestal_dynamics['contactStiffness'],
             collisionMargin=0.01,
-            localInertiaDiagonal=[1668333.33, 1668333.33, 3333333.33],
+            localInertiaDiagonal=self.structure_config['pedestal'].get('inertia', [0, 0, 0]),  # Use provided inertia or default to [0, 0, 0]
             physicsClientId=self.client_id
         )
 
@@ -404,6 +420,8 @@ class SimulationNode(Node):
         for link_index in range(num_joints):
             link_state = p.getLinkState(self.robot_id, link_index, physicsClientId=self.client_id)
             self.get_logger().info(f"Link {link_index} state: {link_state}")
+
+
 
     def spawn_pbr_on_pedestal(self):
         """Retrieve parameters and spawn the PBR model on top of the pedestal."""
@@ -581,6 +599,7 @@ class SimulationNode(Node):
 
 
     def execute_pose_trajectory_callback(self, goal_handle):
+        """the callback function for the displacement data"""
         self.logger.info("Received LoadDispl action goal...")
 
         positions = goal_handle.request.positions
@@ -674,16 +693,17 @@ class SimulationNode(Node):
             # Publish the pose
             self.pbr_pose_publisher.publish(pose_msg)
 
-        # Plot the results after the simulation is complete
-        plt.figure()
-        plt.plot(simulation_timestamps, target_positions, label='Target Position')
-        plt.plot(simulation_timestamps, actual_positions, '--', label='Actual Position')
-        plt.xlabel('Time (s)')
-        plt.ylabel('Position')
-        plt.title('Target vs Actual Position')
-        plt.legend()
-        plt.grid(True)
-        plt.show()
+        # Plot the results after the simulation is complete if plotting is enabled
+        if self.enable_plotting:
+            plt.figure()
+            plt.plot(simulation_timestamps, target_positions, label='Target Position')
+            plt.plot(simulation_timestamps, actual_positions, '--', label='Actual Position')
+            plt.xlabel('Time (s)')
+            plt.ylabel('Position')
+            plt.title('Target vs Actual Position')
+            plt.legend()
+            plt.grid(True)
+            plt.show()
 
         goal_handle.succeed()
         result = LoadDispl.Result()
@@ -692,16 +712,17 @@ class SimulationNode(Node):
 
 
 
+
     def execute_trajectory_callback(self, goal_handle):
         '''Execute the trajectory from the data received'''
         self.logger.info("Executing trajectory callback...")
 
-        client_id = goal_handle.request.client_id
+        client_id = self.client_id
         robot_id = goal_handle.request.robot_id
         positions = goal_handle.request.position_list
         velocities = goal_handle.request.velocity_list
         timestamps = goal_handle.request.timestamp_list
-        wait_time = goal_handle.request.wait_time
+        response_wait_time = goal_handle.request.response_wait_time
 
         feedback_msg = TrajectoryAction.Feedback()
 
@@ -771,8 +792,8 @@ class SimulationNode(Node):
         self.get_logger().info(f"Total execution time: {total_execution_time} seconds")
 
         # Wait for the specified wait time after the trajectory execution
-        self.get_logger().info(f"Waiting for {wait_time} seconds after trajectory completion.")
-        end_wait_time = time.time() + wait_time
+        self.get_logger().info(f"Waiting for {response_wait_time} seconds after trajectory completion.")
+        end_wait_time = time.time() + response_wait_time
         while time.time() < end_wait_time:
             p.stepSimulation(physicsClientId=client_id)
             if self.realtime_flag:

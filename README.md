@@ -52,7 +52,7 @@ print(pb.__version__)
  3 . Run the simulation_node.py for the pedestal mesh file using the launch file to launch the pybullet GUI for the VSR Structure.
 
  ```
- ros2 launch virtual_shake_robot_pybullet node.launch.py
+ ros2 launch virtual_shake_robot_pybullet mesh_launch.py
 
  ```
 
@@ -63,10 +63,8 @@ print(pb.__version__)
 
  ```
  5 . The action server in the control_node.py accpets Amplitude[A] and Frequency[F] values that are needed to determine the single_pulse consine motion for the pedestal
-
- ```
+```
  ros2 run virtual_shake_robot_pytbullet pulse_motion_client.py 2.0 1.0
-
  ```
  This will send the A and F values for the motion of the pedestal to the control_node.py that generates the trajectory of the pedestal.
 
@@ -94,23 +92,78 @@ Now we have a good controller that can handle range of the A and F values, so we
 ros2 run virtual_shake_robot_pybullet pbr_loader.py [box|mesh]
 ```
 
-For the spwaning of the mesh file for the pbr you can type mesh in front of the command or for the box  you can type box 
+To spawn the PBR using a mesh file, you can utilize the command:
+
+```
+ros2 run virtual_shake_robot_pybullet pbr_loader.py mesh
+```
+
+Similarly for the box :
+
+```
+ros2 run virtual_shake_robot_pybullet pbr_loader.py box
+```
 
 Both the properties for the mesh file and box are calucalted accurately the tutorial for calculating them from Fusion360 is present in [Inertia.md](docs/Inertia.md). Please refer that if you have any doubt for calculating the inetia values accurately for the mesh file(.obj).
 
 ![Pbr mesh file on pedestal](docs/pbr.png)
 
 
-## Starting an continous experiment for an range of (A,F) values
+## Running the Experiment in Different Modes
 
-We have an function in the control node that will generate the will take in range of PGV and PGV/PGA values and generate A and F so we have designed a framework such that tthe experiment when you trigger it after intiating the control node will start the experiment.
+We have four distinct experiment modes that can be triggered by setting the motion_mode parameter. These modes dictate how the pedestal behaves during the experiment:
 
-This is the ros2 standard service command to start  the experiment that will trigger the start  of the experiment continously.
+Single Cosine Mode: This mode applies a single cosine motion based on provided A and F values and is the default mode.
+
+The implementation for this experiment is given above in the README.md
+
+Grid Cosine Mode : 
+
+This mode is similar to the single_pulse_cosine motion but it generates a range of A and F values from the defined PGV and PGV/PGA range of values.
+
+So after triggering this experiment the continous experiment will get triggered for the bunch of A and F values .
+
+To trigger the experiment :
+
+```
+ros2 launch virtual_shake_robot_pybullet box_launch.py motion_mode:=grid_cosine
+```
+Single Recording Mode:
+
+This mode is run on the experiment data, the actual data that we have collected our lab to verify the virtual environment.
+
+This has the range of displacement  for the pedestal given in the file, there are multiple tests  conducted on the rock.
+
+There are two mesh models sp1 and sp2 mesh models on which the experiment were conducted.
+
+
+In this mode, you can send the particular test no to conduct, and check the output  that is whether the rock has topppled or not.
+
+To trigger this :
+
+```
+ros2 launch virtual_shake_robot_pybullet sp1_launch.py motion_mode:=single_recording
+```
+
+After this you also need to launch the perception_node.py where we record the trajectory data.
+
+```
+ros2 run virtual_shake_robot_pybullet perception_node.py
 
 ```
 
-ros2 service call /start_experiments std_srvs/srv/Empty
+All Recording Mode :
+
+If you want to run all the tests from the start there is a method for that as well. It is similar to the single_recording_mode.
+
+To beign all the tests
+
 ```
+ros2 launch virtual_shake_robot_pybullet sp1_launch.py motion_mode:=all_recordings
+```
+Similarly launch the perception_node.py
+
+
 
 
 
