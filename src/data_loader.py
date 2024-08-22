@@ -164,7 +164,7 @@ class DataLoader:
 def main():
     # Initialize the DataLoader with relative paths
     data_loader = DataLoader(
-        excel_file_name='Earthquake Records Info.xlsx',
+        excel_file_name='Earthquake_Records_Info.xlsx',
         folder_name='ASU_ Shared_ Scans/Shake_ Table_ Response',
         pickle_file_name='combined_data.pkl'
     )
