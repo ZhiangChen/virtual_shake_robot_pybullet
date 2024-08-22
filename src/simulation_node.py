@@ -17,6 +17,19 @@ from std_srvs.srv import SetBool
 from virtual_shake_robot_pybullet.srv import ManageModel
 
 class SimulationNode(Node):
+
+    """
+    A ROS2 node for simulating the Virtual Shake Robot (VSR) using PyBullet.
+
+    The SimulationNode class is responsible for managing the simulation environment, executing trajectory actions, 
+    loading and manipulating Precariously Balanced Rocks (PBR), and publishing simulation data. It includes:
+    
+    - Action servers for handling trajectory, PBR loading, and displacement actions.
+    - Publishers for the position, velocity, and state of the pedestal and PBR in the simulation.
+    - Parameters for configuring the physics engine, dynamics, and structure of the simulated objects.
+    
+    This class is the core component of the simulation system, integrating the PyBullet physics engine with ROS2.
+    """
     def __init__(self):
         super().__init__('simulation_node')
         self.logger = self.get_logger()
@@ -210,7 +223,15 @@ class SimulationNode(Node):
         # self.spawn_pbr_on_pedestal()
 
     def server_connection(self):
-        """Establish a connection to the PyBullet GUI"""
+        """
+        Establishes a connection to the PyBullet GUI.
+
+        Arguments:
+            None
+
+        Returns:
+            client_id (int): The ID of the PyBullet client.
+        """
         client_id = p.connect(p.GUI)  # Will return a client ID
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         self.get_logger().info(f"The Client_id is : {client_id}")
@@ -244,7 +265,16 @@ class SimulationNode(Node):
         self.get_logger().info(f"physics Parameters : {physics_params}")
 
     def manage_model_callback(self, request, response):
-        """Handles the model management service, allowing spawning and deletion of models."""
+        """
+        Callback function for the 'manage_model' service. Handles spawning and deleting the model in the simulation.
+
+        Arguments:
+            request (ManageModel.Request): Service request containing the action ('spawn' or 'delete').
+            response (ManageModel.Response): Service response indicating success or failure of the action.
+
+        Returns:
+            response (ManageModel.Response): Updated service response after processing the request.
+        """
         self.get_logger().info(f"manage_model_callback called with action: {request.action}")
         model_wait_time = self.get_parameter('simulation_node.engineSettings.loading_wait_time').value
         time_step = self.engine_settings['timestep']
@@ -424,7 +454,15 @@ class SimulationNode(Node):
 
 
     def spawn_pbr_on_pedestal(self):
-        """Retrieve parameters and spawn the PBR model on top of the pedestal."""
+        """
+        Spawns the Precariously Balanced Rock (PBR) on top of the pedestal. Handles both mesh and box configurations for the rock.
+
+        Arguments:
+            None
+
+        Returns:
+            bool: True if the rock was spawned successfully, False otherwise.
+        """
         try:
 
             if hasattr(self, 'rock_structure_mesh_config'):
@@ -510,7 +548,15 @@ class SimulationNode(Node):
 
 
     def load_pbr_callback(self, goal_handle):
-        '''Load the PBR callback function'''
+        """
+        Callback function for loading the PBR structure as part of the LoadPBR action.
+
+        Arguments:
+            goal_handle (LoadPBR.GoalHandle): The goal handle containing the structure name and type (mesh or box).
+
+        Returns:
+            result (LoadPBR.Result): The result of the action, indicating success or failure.
+        """
 
         self.logger.info("Loading PBR structure...")
         structure_name = goal_handle.request.structure_name
@@ -599,7 +645,15 @@ class SimulationNode(Node):
 
 
     def execute_pose_trajectory_callback(self, goal_handle):
-        """the callback function for the displacement data"""
+        """
+        Executes the trajectory based on the positions and timestamps provided in the LoadDispl action goal.
+
+        Arguments:
+            goal_handle (LoadDispl.GoalHandle): The goal handle containing positions and timestamps.
+
+        Returns:
+            result (LoadDispl.Result): The result of the action, indicating success or failure.
+        """
         self.logger.info("Received LoadDispl action goal...")
 
         positions = goal_handle.request.positions
@@ -714,7 +768,15 @@ class SimulationNode(Node):
 
 
     def execute_trajectory_callback(self, goal_handle):
-        '''Execute the trajectory from the data received'''
+        """
+        Executes the trajectory from the data received in the TrajectoryAction goal.
+
+        Arguments:
+            goal_handle (TrajectoryAction.GoalHandle): The goal handle containing positions, velocities, and timestamps.
+
+        Returns:
+            result (TrajectoryAction.Result): The result of the action, including the actual positions and velocities after execution.
+        """
         self.logger.info("Executing trajectory callback...")
 
         client_id = self.client_id

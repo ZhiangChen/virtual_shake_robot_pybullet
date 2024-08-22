@@ -15,6 +15,10 @@ def generate_launch_description():
         default_value='',
         description='Motion mode for the control node: grid_cosine, single_recording, all_recordings'
     )
+    test_no_arg = DeclareLaunchArgument(
+        'test_no',
+        description='Test number for single_recording mode'
+    )
     
     # Retrieve the ROS2 workspace path from the environment or use a default
     ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
@@ -93,12 +97,14 @@ def generate_launch_description():
         name='control_node',
         output='screen',
         parameters=[
-            {'motion_mode': LaunchConfiguration('motion_mode')}
+            {'motion_mode': LaunchConfiguration('motion_mode')},
+            {'test_no': LaunchConfiguration('test_no')}
         ]
     )
 
     return LaunchDescription([
         motion_mode_arg,
+        test_no_arg,
         simulation_node,
         control_node    
     ])
