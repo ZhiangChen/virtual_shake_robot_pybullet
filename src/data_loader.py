@@ -161,9 +161,9 @@ def main():
     
     package_share_directory = get_package_share_directory('virtual_shake_robot_pybullet')
     
-    excel_file_path = os.path.join(package_share_directory, 'data', 'ASU_ Shared_ Scans', 'Shake_ Table_ Response', 'Earthquake_Records_Info.xlsx')
-    folder_path = os.path.join(package_share_directory, 'data', 'ASU_ Shared_ Scans', 'Shake_ Table_ Response')
-    pickle_file_path = os.path.join(package_share_directory, 'data', 'ASU_ Shared_ Scans', 'combined_data.pkl')
+    excel_file_path = os.path.join(package_share_directory, 'data', 'ASU_Shared_Scans', 'Shake_Table_Response', 'Earthquake_Records_Info.xlsx')
+    folder_path = os.path.join(package_share_directory, 'data', 'ASU_Shared_Scans', 'Shake_Table_Response')
+    pickle_file_path = os.path.join(package_share_directory, 'data', 'ASU_Shared_Scans', 'combined_data.pkl')
 
     # Initialize the DataLoader
     data_loader = DataLoader(
