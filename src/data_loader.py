@@ -100,7 +100,7 @@ class DataLoader:
         return self.combined_data
 
 def main():
-    excel_file_path = '/home/akshay/ASU_ Shared_ Scans/Shake_ Table_ Response/Earthquake Records Info.xlsx'
+    excel_file_path = '/home/akshay/ASU_ Shared_ Scans/Shake_ Table_ Response/Earthquake_Records_Info.xlsx'
     folder_path = '/home/akshay/ASU_ Shared_ Scans/Shake_ Table_ Response'
     pickle_file_path = 'combined_data.pkl'
 
