@@ -2,10 +2,34 @@
 
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 import os
 import yaml
+
+def set_test_no_if_provided(context, *args, **kwargs):
+    test_no = context.launch_configurations.get('test_no', '')
+    if test_no.isdigit():
+        return [Node(
+            package='virtual_shake_robot_pybullet',
+            executable='control_node.py',
+            name='control_node',
+            output='screen',
+            parameters=[
+                {'motion_mode': LaunchConfiguration('motion_mode')},
+                {'test_no': int(test_no)}  
+            ]
+        )]
+    else:
+        return [Node(
+            package='virtual_shake_robot_pybullet',
+            executable='control_node.py',
+            name='control_node',
+            output='screen',
+            parameters=[
+                {'motion_mode': LaunchConfiguration('motion_mode')}
+            ]
+        )]
 
 def generate_launch_description():
     
@@ -17,6 +41,7 @@ def generate_launch_description():
     )
     test_no_arg = DeclareLaunchArgument(
         'test_no',
+        default_value='',
         description='Test number for single_recording mode'
     )
     
@@ -90,21 +115,9 @@ def generate_launch_description():
         ]
     )
 
-    # Define the control node with motion_mode argument
-    control_node = Node(
-        package='virtual_shake_robot_pybullet',
-        executable='control_node.py',
-        name='control_node',
-        output='screen',
-        parameters=[
-            {'motion_mode': LaunchConfiguration('motion_mode')},
-            {'test_no': LaunchConfiguration('test_no')}
-        ]
-    )
-
     return LaunchDescription([
         motion_mode_arg,
         test_no_arg,
         simulation_node,
-        control_node    
+        OpaqueFunction(function=set_test_no_if_provided)  
     ])

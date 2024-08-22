@@ -414,6 +414,9 @@ class SimulationNode(Node):
         world_box_dynamics = self.dynamics_config['world_box']
         pedestal_dynamics = self.dynamics_config['pedestal']
 
+        base_inertia = self.structure_config['world_box']['inertia']
+        pedestal_inertia = self.structure_config['pedestal']['inertia']
+
         # Set dynamics parameters for the base and pedestal
         p.changeDynamics(
             self.robot_id, -1,
@@ -424,7 +427,7 @@ class SimulationNode(Node):
             contactDamping=world_box_dynamics['contactDamping'],
             contactStiffness=world_box_dynamics['contactStiffness'],
             collisionMargin=0.01,
-            localInertiaDiagonal=[0, 0, 0],
+            localInertiaDiagonal=base_inertia,
             physicsClientId=self.client_id
         )
 
@@ -437,7 +440,7 @@ class SimulationNode(Node):
             contactDamping=pedestal_dynamics['contactDamping'],
             contactStiffness=pedestal_dynamics['contactStiffness'],
             collisionMargin=0.01,
-            localInertiaDiagonal=self.structure_config['pedestal'].get('inertia', [0, 0, 0]),  # Use provided inertia or default to [0, 0, 0]
+            localInertiaDiagonal=pedestal_inertia,
             physicsClientId=self.client_id
         )
 

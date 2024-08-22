@@ -7,25 +7,21 @@ from scipy.signal import butter, filtfilt
 from ament_index_python.packages import get_package_share_directory
 
 class DataLoader:
-    def __init__(self, excel_file_name, folder_name, pickle_file_name):
+    def __init__(self, excel_file_path, folder_path, pickle_file_path):
         """
         Initializes the DataLoader, loading data from Excel and text files or from a cached pickle file.
 
         Args:
-            excel_file_name (str): The name of the Excel file containing metadata.
-            folder_name (str): The name of the folder containing the text data files.
-            pickle_file_name (str): The name of the pickle file for cached combined data.
+            excel_file_path (str): The full path of the Excel file containing metadata.
+            folder_path (str): The full path of the folder containing the text data files.
+            pickle_file_path (str): The full path of the pickle file for cached combined data.
 
         Returns:
             None
         """
-        # Get the package share directory
-        package_share_directory = get_package_share_directory('virtual_shake_robot_pybullet')
-
-        # Construct the paths relative to the package's data directory
-        self.excel_file_path = os.path.join(package_share_directory, 'data', folder_name, excel_file_name)
-        self.folder_path = os.path.join(package_share_directory, 'data', folder_name)
-        self.pickle_file_path = os.path.join(package_share_directory, 'data', pickle_file_name)
+        self.excel_file_path = excel_file_path
+        self.folder_path = folder_path
+        self.pickle_file_path = pickle_file_path
 
         self.scale_factor = 5.9797 * 10**-4  # Scale factor to convert voltage to inches
         self.inch_to_meter = 0.0254  # Conversion factor from inches to meters
@@ -162,22 +158,33 @@ class DataLoader:
         return self.combined_data
 
 def main():
-    # Initialize the DataLoader with relative paths
+    
+    package_share_directory = get_package_share_directory('virtual_shake_robot_pybullet')
+    
+    excel_file_path = os.path.join(package_share_directory, 'data', 'ASU_ Shared_ Scans', 'Shake_ Table_ Response', 'Earthquake_Records_Info.xlsx')
+    folder_path = os.path.join(package_share_directory, 'data', 'ASU_ Shared_ Scans', 'Shake_ Table_ Response')
+    pickle_file_path = os.path.join(package_share_directory, 'data', 'ASU_ Shared_ Scans', 'combined_data.pkl')
+
+    # Initialize the DataLoader
     data_loader = DataLoader(
-        excel_file_name='Earthquake_Records_Info.xlsx',
-        folder_name='ASU_ Shared_ Scans/Shake_ Table_ Response',
-        pickle_file_name='combined_data.pkl'
+        excel_file_path=excel_file_path,
+        folder_path=folder_path,
+        pickle_file_path=pickle_file_path
     )
 
     # Retrieve combined data
     combined_data = data_loader.get_combined_data()
 
-    # Print out the data for the first few test cases
+    # Print out the data for the first few test cases to verify
     for test_no, data in combined_data.items():
         print(f"Test No: {test_no}")
         print(f"PGV/PGA: {data['PGV/PGA']}")
         print(f"Scaled PGA: {data['Scaled PGA']}")
         print(f"Time vs Displacement Data:\n{data['Time vs Displacement'].head()}\n")
+
+if __name__ == '__main__':
+    main()
+
 
 if __name__ == '__main__':
     main()
