@@ -430,7 +430,8 @@ class SimulationNode(Node):
 
     def spawn_pbr_on_pedestal(self):
         """
-        Spawns the Precariously Balanced Rock (PBR) on top of the pedestal and updates the pedestal's dynamics based on the PBR's properties.
+        Spawns the Precariously Balanced Rock (PBR) on top of the pedestal and updates the pedestal's dynamics
+        based on the PBR's properties.
         """
         try:
             if hasattr(self, 'rock_structure_mesh_config'):
@@ -457,6 +458,7 @@ class SimulationNode(Node):
                 self.rock_id = rock_id
                 self.get_logger().info(f"PBR model loaded with ID: {self.rock_id}")
 
+                # Set the dynamics for the PBR
                 p.changeDynamics(
                     self.rock_id, -1,
                     mass=mass,
@@ -493,6 +495,7 @@ class SimulationNode(Node):
                     physicsClientId=self.client_id
                 )
 
+                # Set the dynamics for the PBR
                 p.changeDynamics(
                     rock_id, -1,
                     restitution=restitution,
@@ -505,19 +508,18 @@ class SimulationNode(Node):
                     physicsClientId=self.client_id
                 )
 
-            # Update the pedestal dynamics based on the PBR dynamics
-            pbr_dynamics = self.retrieve_pbr_dynamics()
-            if pbr_dynamics:
-                p.changeDynamics(
-                    self.robot_id, 0,  # Link index for the pedestal
-                    contactDamping=pbr_dynamics['contactDamping'],
-                    contactStiffness=pbr_dynamics['contactStiffness'],
-                    physicsClientId=self.client_id
-                )
-                # Verify that the dynamics were set correctly
-                pedestal_dynamics_info = p.getDynamicsInfo(self.robot_id, 0, physicsClientId=self.client_id)
-                self.get_logger().info(f"Pedestal contactDamping: {pedestal_dynamics_info[8]}")
-                self.get_logger().info(f"Pedestal contactStiffness: {pedestal_dynamics_info[9]}")
+            # Apply the same dynamics to the pedestal as the PBR
+            p.changeDynamics(
+                self.robot_id, 0,  # Link index for the pedestal
+                contactDamping=contactDamping,
+                contactStiffness=contactStiffness,
+                physicsClientId=self.client_id
+            )
+
+            # Verify that the dynamics were set correctly
+            pedestal_dynamics_info = p.getDynamicsInfo(self.robot_id, 0, physicsClientId=self.client_id)
+            self.get_logger().info(f"Pedestal contactDamping: {pedestal_dynamics_info[8]}")
+            self.get_logger().info(f"Pedestal contactStiffness: {pedestal_dynamics_info[9]}")
 
             return True
 
@@ -623,18 +625,6 @@ class SimulationNode(Node):
             goal_handle.abort()
             return LoadPBR.Result(success=False)
 
-    def retrieve_pbr_dynamics(self):
-        """Retrieve the contact damping and stiffness parameters for the PBR."""
-        if self.rock_id is not None:
-            dynamics_info = p.getDynamicsInfo(self.rock_id, -1, physicsClientId=self.client_id)
-            return {
-                'contactDamping': dynamics_info[8],  # Index 8 for contactDamping
-                'contactStiffness': dynamics_info[9],  # Index 9 for contactStiffness
-            }
-        else:
-            self.get_logger().error("PBR has not been loaded yet.")
-            return None
-           
 
 
     def execute_pose_trajectory_callback(self, goal_handle):
