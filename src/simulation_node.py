@@ -17,6 +17,19 @@ from std_srvs.srv import SetBool
 from virtual_shake_robot_pybullet.srv import ManageModel
 
 class SimulationNode(Node):
+
+    """
+    A ROS2 node for simulating the Virtual Shake Robot (VSR) using PyBullet.
+
+    The SimulationNode class is responsible for managing the simulation environment, executing trajectory actions, 
+    loading and manipulating Precariously Balanced Rocks (PBR), and publishing simulation data. It includes:
+    
+    - Action servers for handling trajectory, PBR loading, and displacement actions.
+    - Publishers for the position, velocity, and state of the pedestal and PBR in the simulation.
+    - Parameters for configuring the physics engine, dynamics, and structure of the simulated objects.
+    
+    This class is the core component of the simulation system, integrating the PyBullet physics engine with ROS2.
+    """
     def __init__(self):
         super().__init__('simulation_node')
         self.logger = self.get_logger()
@@ -61,6 +74,8 @@ class SimulationNode(Node):
         self.declare_parameter('realtime_flag', True)
 
         self.realtime_flag = self.get_parameter('realtime_flag').value
+        self.declare_parameter('enable_plotting', True)  # Declare as a ROS2 parameter
+        self.enable_plotting = self.get_parameter('enable_plotting').value
         
 
 
@@ -69,7 +84,7 @@ class SimulationNode(Node):
         self.declare_parameters(
             namespace="",
             parameters=[
-                ('simulation_node.engineSettings.model_wait_time', 2.0),
+                ('simulation_node.engineSettings.loading_wait_time', rclpy.Parameter.Type.DOUBLE),
                 ('engineSettings.gravity', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('engineSettings.timeStep', rclpy.Parameter.Type.DOUBLE),
                 ('engineSettings.useSplitImpulse', rclpy.Parameter.Type.BOOL),
@@ -94,6 +109,8 @@ class SimulationNode(Node):
                 ('structure.pedestal.mesh', rclpy.Parameter.Type.STRING),
                 ('structure.pedestal.meshScale', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('structure.world_box.mass', rclpy.Parameter.Type.DOUBLE),
+                ('structure.world_box.inertia', rclpy.Parameter.Type.DOUBLE_ARRAY), 
+                ('structure.pedestal.inertia', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('structure.world_box.dimensions', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('rock_structure_box.dimensions', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('rock_structure_box.mass', rclpy.Parameter.Type.DOUBLE),
@@ -152,10 +169,12 @@ class SimulationNode(Node):
             'pedestal': {
                 'mass': self.get_parameter('structure.pedestal.mass').value,
                 'dimensions': self.get_parameter('structure.pedestal.dimensions').value,
+                'inertia': self.get_parameter('structure.pedestal.inertia').value
             },
             'world_box': {
                 'mass': self.get_parameter('structure.world_box.mass').value,
-                'dimensions': self.get_parameter('structure.world_box.dimensions').value
+                'dimensions': self.get_parameter('structure.world_box.dimensions').value,
+                'inertia': self.get_parameter('structure.world_box.inertia').value
             }
         }
 
@@ -204,7 +223,15 @@ class SimulationNode(Node):
         self.spawn_pbr_on_pedestal()
 
     def server_connection(self):
-        """Establish a connection to the PyBullet GUI"""
+        """
+        Establishes a connection to the PyBullet GUI.
+
+        Arguments:
+            None
+
+        Returns:
+            client_id (int): The ID of the PyBullet client.
+        """
         client_id = p.connect(p.GUI)  # Will return a client ID
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         self.get_logger().info(f"The Client_id is : {client_id}")
@@ -238,13 +265,23 @@ class SimulationNode(Node):
         self.get_logger().info(f"physics Parameters : {physics_params}")
 
     def manage_model_callback(self, request, response):
+        """
+        Callback function for the 'manage_model' service. Handles spawning and deleting the model in the simulation.
+
+        Arguments:
+            request (ManageModel.Request): Service request containing the action ('spawn' or 'delete').
+            response (ManageModel.Response): Service response indicating success or failure of the action.
+
+        Returns:
+            response (ManageModel.Response): Updated service response after processing the request.
+        """
         self.get_logger().info(f"manage_model_callback called with action: {request.action}")
-        model_wait_time = self.get_parameter('simulation_node.engineSettings.model_wait_time').value
+        model_wait_time = self.get_parameter('simulation_node.engineSettings.loading_wait_time').value
         time_step = self.engine_settings['timestep']
 
         if request.action == "spawn":
             urdf_path = self.rock_structure_mesh_config['mesh']
-            rock_position = self.rock_structure_mesh_config['position']  
+            rock_position = self.rock_structure_mesh_config['rock_position']  
             model_id = p.loadURDF(urdf_path, basePosition=rock_position, physicsClientId=self.client_id)
 
             if model_id < 0:
@@ -290,38 +327,60 @@ class SimulationNode(Node):
             response.message = "Unknown action."
             self.get_logger().info(response.message)  # Log the unknown action
 
-        return response
-    
-
-
+   
     def create_robot(self):
-        self.get_logger().info("Loading plane URDF...")
+        """Creates the robot model in the PyBullet simulation based on the configuration."""
+        self.get_logger().info("Loading the VSR_shake_table...")
         plane_id = p.loadURDF("plane.urdf", physicsClientId=self.client_id)
         self.get_logger().info(f"Plane loaded with ID: {plane_id}")
 
-        # Define the base of the shake table
-        base_collision_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[25, 7, 1])
-        base_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[25, 7, 1], rgbaColor=[1, 1, 0, 1])  
+        # Define the base of the shake table using parameters from vsr_structure.yaml
+        world_box_dimensions = [dim / 2 for dim in self.structure_config['world_box']['dimensions']]  # Divide by 2 for halfExtents
+        base_collision_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=world_box_dimensions)
+        base_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=world_box_dimensions, rgbaColor=[1, 1, 0, 1])  
 
-        # Define the pedestal of the shake table
-        pedestal_collision_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[5, 5, 0.25])
-        pedestal_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[5, 5, 0.25], rgbaColor=[1, 0, 0, 1])  
-
-        # Create the base and pedestal as a single multi-body
+        # Create the base as a multi-body
         base_position = [0, 0, 1.0]  # Base is positioned at z = 1.0
         base_orientation = p.getQuaternionFromEuler([0, 0, 0])
 
+        # Calculate the height of the base
+        base_height = world_box_dimensions[2]  
+
+        # Check if we are using a mesh or a box for the pedestal
+        if 'mesh' in self.structure_config['pedestal']:
+            # Define the pedestal using a mesh
+            pedestal_mesh_path = self.structure_config['pedestal']['mesh']
+            pedestal_mesh_scale = self.structure_config['pedestal']['meshScale']
+            pedestal_collision_shape = p.createCollisionShape(p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=pedestal_mesh_scale)
+            pedestal_visual_shape = p.createVisualShape(p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=pedestal_mesh_scale, rgbaColor=[1, 0, 0, 1])
+
+            pedestal_dimensions = [dim / 2 for dim in self.structure_config['pedestal']['dimensions']]
+            pedestal_height = pedestal_dimensions[2]  
+        else:
+            # Define the pedestal using a box
+            pedestal_dimensions = [dim / 2 for dim in self.structure_config['pedestal']['dimensions']]
+            self.get_logger().info(f"The pedestal_dimensions are {pedestal_dimensions}")
+            pedestal_collision_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=pedestal_dimensions)
+            pedestal_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=pedestal_dimensions, rgbaColor=[1, 0, 0, 1])  
+
+            # Calculate the pedestal height
+            pedestal_height = pedestal_dimensions[2] 
+
+        # Calculate the Z position of the pedestal such that its bottom aligns with the top of the base
+        pedestal_position_z = base_height + pedestal_height
+        self.get_logger().info(f"The pedestal height is {pedestal_position_z}")
+
+        # Create the pedestal as a link to the base
         link_masses = [self.structure_config['pedestal']['mass']]  
         link_collision_shapes = [pedestal_collision_shape]
         link_visual_shapes = [pedestal_visual_shape]
-        link_positions = [[0, 0, 1.25]]  
+        link_positions = [[0, 0, pedestal_position_z]]  # Calculated Z position
         link_orientations = [p.getQuaternionFromEuler([0, 0, 0])]
         link_inertial_frame_positions = [[0, 0, 0]]
         link_inertial_frame_orientations = [p.getQuaternionFromEuler([0, 0, 0])]
         indices = [0]
-        joint_types = [p.JOINT_PRISMATIC]
+        joint_types = [p.JOINT_PRISMATIC]  
         joint_axis = [[1, 0, 0]]  
-
         base = p.createMultiBody(
             baseMass=self.structure_config['world_box']['mass'],  
             baseCollisionShapeIndex=base_collision_shape,
@@ -364,51 +423,17 @@ class SimulationNode(Node):
             self.get_logger().error("No joints found in the created robot.")
             return
 
-        # Retrieve dynamics parameters
-        world_box_dynamics = self.dynamics_config['world_box']
-        pedestal_dynamics = self.dynamics_config['pedestal']
 
-        # Set dynamics parameters for the base and pedestal
-        p.changeDynamics(
-            self.robot_id, -1,
-            restitution=world_box_dynamics['restitution'],
-            lateralFriction=world_box_dynamics['lateralFriction'],
-            spinningFriction=world_box_dynamics['spinningFriction'],
-            rollingFriction=world_box_dynamics['rollingFriction'],
-            contactDamping=world_box_dynamics['contactDamping'],
-            contactStiffness=world_box_dynamics['contactStiffness'],
-            collisionMargin=0.01,
-            localInertiaDiagonal=[0,0,0],
-            physicsClientId=self.client_id
-        )
 
-        p.changeDynamics(
-            self.robot_id, 0,  # Link index for the pedestal
-            restitution=pedestal_dynamics['restitution'],
-            lateralFriction=pedestal_dynamics['lateralFriction'],
-            spinningFriction=pedestal_dynamics['spinningFriction'],
-            rollingFriction=pedestal_dynamics['rollingFriction'],
-            contactDamping=pedestal_dynamics['contactDamping'],
-            contactStiffness=pedestal_dynamics['contactStiffness'],
-            collisionMargin=0.01,
-            localInertiaDiagonal=[1668333.33, 1668333.33, 3333333.33],
-            physicsClientId=self.client_id
-        )
 
-        # Print joint info
-        for joint_index in range(num_joints):
-            joint_info = p.getJointInfo(self.robot_id, joint_index, physicsClientId=self.client_id)
-            self.get_logger().info(f"Joint {joint_index} info: {joint_info}")
 
-        # Print link state
-        for link_index in range(num_joints):
-            link_state = p.getLinkState(self.robot_id, link_index, physicsClientId=self.client_id)
-            self.get_logger().info(f"Link {link_index} state: {link_state}")
 
     def spawn_pbr_on_pedestal(self):
-        """Retrieve parameters and spawn the PBR model on top of the pedestal."""
+        """
+        Spawns the Precariously Balanced Rock (PBR) on top of the pedestal and updates the pedestal's dynamics
+        based on the PBR's properties.
+        """
         try:
-
             if hasattr(self, 'rock_structure_mesh_config'):
                 urdf_path = self.rock_structure_mesh_config['mesh']
                 mesh_scale = self.rock_structure_mesh_config['meshScale']
@@ -433,6 +458,7 @@ class SimulationNode(Node):
                 self.rock_id = rock_id
                 self.get_logger().info(f"PBR model loaded with ID: {self.rock_id}")
 
+                # Set the dynamics for the PBR
                 p.changeDynamics(
                     self.rock_id, -1,
                     mass=mass,
@@ -444,6 +470,7 @@ class SimulationNode(Node):
                     contactStiffness=contactStiffness,
                     physicsClientId=self.client_id
                 )
+
             else:
                 dimensions = self.rock_structure_box_config['dimensions']
                 mass = self.rock_structure_box_config['mass']
@@ -468,6 +495,7 @@ class SimulationNode(Node):
                     physicsClientId=self.client_id
                 )
 
+                # Set the dynamics for the PBR
                 p.changeDynamics(
                     rock_id, -1,
                     restitution=restitution,
@@ -480,7 +508,18 @@ class SimulationNode(Node):
                     physicsClientId=self.client_id
                 )
 
-           
+            # Apply the same dynamics to the pedestal as the PBR
+            p.changeDynamics(
+                self.robot_id, 0,  # Link index for the pedestal
+                contactDamping=contactDamping,
+                contactStiffness=contactStiffness,
+                physicsClientId=self.client_id
+            )
+
+            # Verify that the dynamics were set correctly
+            pedestal_dynamics_info = p.getDynamicsInfo(self.robot_id, 0, physicsClientId=self.client_id)
+            self.get_logger().info(f"Pedestal contactDamping: {pedestal_dynamics_info[8]}")
+            self.get_logger().info(f"Pedestal contactStiffness: {pedestal_dynamics_info[9]}")
 
             return True
 
@@ -492,7 +531,15 @@ class SimulationNode(Node):
 
 
     def load_pbr_callback(self, goal_handle):
-        '''Load the PBR callback function'''
+        """
+        Callback function for loading the PBR structure as part of the LoadPBR action.
+
+        Arguments:
+            goal_handle (LoadPBR.GoalHandle): The goal handle containing the structure name and type (mesh or box).
+
+        Returns:
+            result (LoadPBR.Result): The result of the action, indicating success or failure.
+        """
 
         self.logger.info("Loading PBR structure...")
         structure_name = goal_handle.request.structure_name
@@ -577,10 +624,19 @@ class SimulationNode(Node):
             goal_handle.publish_feedback(feedback_msg)
             goal_handle.abort()
             return LoadPBR.Result(success=False)
-                
+
 
 
     def execute_pose_trajectory_callback(self, goal_handle):
+        """
+        Executes the trajectory based on the positions and timestamps provided in the LoadDispl action goal.
+
+        Arguments:
+            goal_handle (LoadDispl.GoalHandle): The goal handle containing positions and timestamps.
+
+        Returns:
+            result (LoadDispl.Result): The result of the action, indicating success or failure.
+        """
         self.logger.info("Received LoadDispl action goal...")
 
         positions = goal_handle.request.positions
@@ -626,13 +682,13 @@ class SimulationNode(Node):
                 # Calculate the time difference between the current and next timestamp
                 time_diff = timestamps[i + 1] - timestamps[i]
                 if time_diff <= 0:
-                    time_diff = 0.001
+                    time_diff = self.engine_settings['timestep']
             else:
                 # Manually set the timestep for the last element
-                time_diff = 0.001  
+                time_diff = self.engine_settings['timestep']
 
             # Step the simulation forward by the calculated time difference
-            num_steps = int(time_diff / 0.001)
+            num_steps = int(time_diff)
             for _ in range(num_steps):
                 p.stepSimulation(physicsClientId=self.client_id)
 
@@ -674,16 +730,17 @@ class SimulationNode(Node):
             # Publish the pose
             self.pbr_pose_publisher.publish(pose_msg)
 
-        # Plot the results after the simulation is complete
-        plt.figure()
-        plt.plot(simulation_timestamps, target_positions, label='Target Position')
-        plt.plot(simulation_timestamps, actual_positions, '--', label='Actual Position')
-        plt.xlabel('Time (s)')
-        plt.ylabel('Position')
-        plt.title('Target vs Actual Position')
-        plt.legend()
-        plt.grid(True)
-        plt.show()
+        # Plot the results after the simulation is complete if plotting is enabled
+        if self.enable_plotting:
+            plt.figure()
+            plt.plot(simulation_timestamps, target_positions, label='Target Position')
+            plt.plot(simulation_timestamps, actual_positions, '--', label='Actual Position')
+            plt.xlabel('Time (s)')
+            plt.ylabel('Position')
+            plt.title('Target vs Actual Position')
+            plt.legend()
+            plt.grid(True)
+            plt.show()
 
         goal_handle.succeed()
         result = LoadDispl.Result()
@@ -692,16 +749,25 @@ class SimulationNode(Node):
 
 
 
+
     def execute_trajectory_callback(self, goal_handle):
-        '''Execute the trajectory from the data received'''
+        """
+        Executes the trajectory from the data received in the TrajectoryAction goal.
+
+        Arguments:
+            goal_handle (TrajectoryAction.GoalHandle): The goal handle containing positions, velocities, and timestamps.
+
+        Returns:
+            result (TrajectoryAction.Result): The result of the action, including the actual positions and velocities after execution.
+        """
         self.logger.info("Executing trajectory callback...")
 
-        client_id = goal_handle.request.client_id
+        client_id = self.client_id
         robot_id = goal_handle.request.robot_id
         positions = goal_handle.request.position_list
         velocities = goal_handle.request.velocity_list
         timestamps = goal_handle.request.timestamp_list
-        wait_time = goal_handle.request.wait_time
+        response_wait_time = goal_handle.request.response_wait_time
 
         feedback_msg = TrajectoryAction.Feedback()
 
@@ -771,8 +837,8 @@ class SimulationNode(Node):
         self.get_logger().info(f"Total execution time: {total_execution_time} seconds")
 
         # Wait for the specified wait time after the trajectory execution
-        self.get_logger().info(f"Waiting for {wait_time} seconds after trajectory completion.")
-        end_wait_time = time.time() + wait_time
+        self.get_logger().info(f"Waiting for {response_wait_time} seconds after trajectory completion.")
+        end_wait_time = time.time() + response_wait_time
         while time.time() < end_wait_time:
             p.stepSimulation(physicsClientId=client_id)
             if self.realtime_flag:

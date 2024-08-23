@@ -1,10 +1,9 @@
 # goal
-int32 client_id
 int32 robot_id
 float64[] position_list
 float64[] velocity_list
 float64[] timestamp_list
-float64 wait_time
+float64 response_wait_time
 ---
 # result
 bool success

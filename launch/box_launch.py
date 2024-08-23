@@ -2,10 +2,48 @@
 
 from launch import LaunchDescription
 from launch_ros.actions import Node
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.substitutions import LaunchConfiguration
 import os
 import yaml
 
+def set_test_no_if_provided(context, *args, **kwargs):
+    test_no = context.launch_configurations.get('test_no', '')
+    if test_no.isdigit():
+        return [Node(
+            package='virtual_shake_robot_pybullet',
+            executable='control_node.py',
+            name='control_node',
+            output='screen',
+            parameters=[
+                {'motion_mode': LaunchConfiguration('motion_mode')},
+                {'test_no': int(test_no)}  
+            ]
+        )]
+    else:
+        return [Node(
+            package='virtual_shake_robot_pybullet',
+            executable='control_node.py',
+            name='control_node',
+            output='screen',
+            parameters=[
+                {'motion_mode': LaunchConfiguration('motion_mode')}
+            ]
+        )]
+
 def generate_launch_description():
+    
+    # Declare the motion_mode argument
+    motion_mode_arg = DeclareLaunchArgument(
+        'motion_mode',
+        default_value='',
+        description='Motion mode for the control node: grid_cosine, single_recording, all_recordings'
+    )
+    test_no_arg = DeclareLaunchArgument(
+        'test_no',
+        default_value='',
+        description='Test number for single_recording mode'
+    )
     
     # Retrieve the ROS2 workspace path from the environment or use a default
     ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
@@ -77,14 +115,9 @@ def generate_launch_description():
         ]
     )
 
-    control_node = Node(
-        package='virtual_shake_robot_pybullet',
-        executable='control_node.py',
-        name='control_node',
-        output='screen'
-    )
-
     return LaunchDescription([
+        motion_mode_arg,
+        test_no_arg,
         simulation_node,
-        control_node    
+        OpaqueFunction(function=set_test_no_if_provided)  
     ])
