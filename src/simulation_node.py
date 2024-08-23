@@ -220,7 +220,7 @@ class SimulationNode(Node):
 
         self.setup_simulation()
         self.create_robot()
-        # self.spawn_pbr_on_pedestal()
+        self.spawn_pbr_on_pedestal()
 
     def server_connection(self):
         """
@@ -360,7 +360,7 @@ class SimulationNode(Node):
         link_masses = [self.structure_config['pedestal']['mass']]  
         link_collision_shapes = [pedestal_collision_shape]
         link_visual_shapes = [pedestal_visual_shape]
-        link_positions = [[0, 0, 1.25]]  # Position pedestal on top of the base, as in the original setup
+        link_positions = [[0, 0, 1.25]]  
         link_orientations = [p.getQuaternionFromEuler([0, 0, 0])]
         link_inertial_frame_positions = [[0, 0, 0]]
         link_inertial_frame_orientations = [p.getQuaternionFromEuler([0, 0, 0])]

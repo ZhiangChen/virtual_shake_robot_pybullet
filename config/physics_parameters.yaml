@@ -7,13 +7,13 @@ simulation_node:
         spinningFriction: 1.5
         rollingFriction: 1.5
         contactDamping: 1.0
-        contactStiffness: 1000000.0
+        contactStiffness: 100000.0
       pedestal:
         restitution: 0.0
         lateralFriction: 1.5
         spinningFriction: 1.5
         rollingFriction: 1.5
         contactDamping: 1.0
-        contactStiffness: 1000000.0
+        contactStiffness: 100000.0
       
       
