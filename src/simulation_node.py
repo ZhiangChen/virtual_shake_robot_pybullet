@@ -220,7 +220,7 @@ class SimulationNode(Node):
 
         self.setup_simulation()
         self.create_robot()
-        self.spawn_pbr_on_pedestal()
+        # self.spawn_pbr_on_pedestal()
 
     def server_connection(self):
         """
@@ -343,6 +343,9 @@ class SimulationNode(Node):
         base_position = [0, 0, 1.0]  # Base is positioned at z = 1.0
         base_orientation = p.getQuaternionFromEuler([0, 0, 0])
 
+        # Calculate the height of the base
+        base_height = world_box_dimensions[2]  
+
         # Check if we are using a mesh or a box for the pedestal
         if 'mesh' in self.structure_config['pedestal']:
             # Define the pedestal using a mesh
@@ -350,23 +353,34 @@ class SimulationNode(Node):
             pedestal_mesh_scale = self.structure_config['pedestal']['meshScale']
             pedestal_collision_shape = p.createCollisionShape(p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=pedestal_mesh_scale)
             pedestal_visual_shape = p.createVisualShape(p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=pedestal_mesh_scale, rgbaColor=[1, 0, 0, 1])
+
+           
+            pedestal_dimensions = [dim / 2 for dim in self.structure_config['pedestal']['dimensions']]
+            pedestal_height = pedestal_dimensions[2]  
         else:
             # Define the pedestal using a box
             pedestal_dimensions = [dim / 2 for dim in self.structure_config['pedestal']['dimensions']]  # Divide by 2 for halfExtents
             pedestal_collision_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=pedestal_dimensions)
             pedestal_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=pedestal_dimensions, rgbaColor=[1, 0, 0, 1])  
 
+            # Calculate the pedestal height
+            pedestal_height = pedestal_dimensions[2] 
+
+        # Calculate the Z position of the pedestal such that its bottom aligns with the top of the base
+        pedestal_position_z = base_height+pedestal_height
+        self.get_logger().info(f"The pedestal height is {pedestal_position_z}")
+
         # Create the pedestal as a link to the base
         link_masses = [self.structure_config['pedestal']['mass']]  
         link_collision_shapes = [pedestal_collision_shape]
         link_visual_shapes = [pedestal_visual_shape]
-        link_positions = [[0, 0, 1.25]]  
+        link_positions = [[0, 0, pedestal_position_z]]  # Calculated Z position
         link_orientations = [p.getQuaternionFromEuler([0, 0, 0])]
         link_inertial_frame_positions = [[0, 0, 0]]
         link_inertial_frame_orientations = [p.getQuaternionFromEuler([0, 0, 0])]
         indices = [0]
-        joint_types = [p.JOINT_PRISMATIC]
-        joint_axis = [[1, 0, 0]]  
+        joint_types = [p.JOINT_FIXED]  # Fixed joint to keep the pedestal in place
+        joint_axis = [[0, 0, 0]]  # No movement in any axis since it's fixed
 
         base = p.createMultiBody(
             baseMass=self.structure_config['world_box']['mass'],  
@@ -453,6 +467,7 @@ class SimulationNode(Node):
         for link_index in range(num_joints):
             link_state = p.getLinkState(self.robot_id, link_index, physicsClientId=self.client_id)
             self.get_logger().info(f"Link {link_index} state: {link_state}")
+
 
 
 
@@ -702,10 +717,10 @@ class SimulationNode(Node):
                 # Calculate the time difference between the current and next timestamp
                 time_diff = timestamps[i + 1] - timestamps[i]
                 if time_diff <= 0:
-                    time_diff = 0.001
+                    time_diff = self.engine_settings['timestep']
             else:
                 # Manually set the timestep for the last element
-                time_diff = 0.001  
+                time_diff = self.engine_settings['timestep']
 
             # Step the simulation forward by the calculated time difference
             num_steps = int(time_diff / 0.001)
