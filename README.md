@@ -139,10 +139,12 @@ There are two mesh models sp1 and sp2 mesh models on which the experiment were c
 
 In this mode, you can send the particular test no to conduct, and check the output  that is whether the rock has topppled or not.
 
+You can send the particular test_no you want to exexute as an argument it is included in the launch argument.
+
 To trigger this :
 
 ```
-ros2 launch virtual_shake_robot_pybullet sp1_launch.py motion_mode:=single_recording
+ros2 launch virtual_shake_robot_pybullet sp1_launch.py motion_mode:=single_recording test_no:=11
 ```
 
 After this you also need to launch the perception_node.py where we record the trajectory data.

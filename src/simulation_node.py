@@ -220,7 +220,7 @@ class SimulationNode(Node):
 
         self.setup_simulation()
         self.create_robot()
-        # self.spawn_pbr_on_pedestal()
+        self.spawn_pbr_on_pedestal()
 
     def server_connection(self):
         """
@@ -354,12 +354,12 @@ class SimulationNode(Node):
             pedestal_collision_shape = p.createCollisionShape(p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=pedestal_mesh_scale)
             pedestal_visual_shape = p.createVisualShape(p.GEOM_MESH, fileName=pedestal_mesh_path, meshScale=pedestal_mesh_scale, rgbaColor=[1, 0, 0, 1])
 
-           
             pedestal_dimensions = [dim / 2 for dim in self.structure_config['pedestal']['dimensions']]
             pedestal_height = pedestal_dimensions[2]  
         else:
             # Define the pedestal using a box
-            pedestal_dimensions = [dim / 2 for dim in self.structure_config['pedestal']['dimensions']]  # Divide by 2 for halfExtents
+            pedestal_dimensions = [dim / 2 for dim in self.structure_config['pedestal']['dimensions']]
+            self.get_logger().info(f"The pedestal_dimensions are {pedestal_dimensions}")
             pedestal_collision_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=pedestal_dimensions)
             pedestal_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=pedestal_dimensions, rgbaColor=[1, 0, 0, 1])  
 
@@ -367,7 +367,7 @@ class SimulationNode(Node):
             pedestal_height = pedestal_dimensions[2] 
 
         # Calculate the Z position of the pedestal such that its bottom aligns with the top of the base
-        pedestal_position_z = base_height+pedestal_height
+        pedestal_position_z = base_height + pedestal_height
         self.get_logger().info(f"The pedestal height is {pedestal_position_z}")
 
         # Create the pedestal as a link to the base
@@ -379,9 +379,8 @@ class SimulationNode(Node):
         link_inertial_frame_positions = [[0, 0, 0]]
         link_inertial_frame_orientations = [p.getQuaternionFromEuler([0, 0, 0])]
         indices = [0]
-        joint_types = [p.JOINT_FIXED]  # Fixed joint to keep the pedestal in place
-        joint_axis = [[0, 0, 0]]  # No movement in any axis since it's fixed
-
+        joint_types = [p.JOINT_PRISMATIC]  
+        joint_axis = [[1, 0, 0]]  
         base = p.createMultiBody(
             baseMass=self.structure_config['world_box']['mass'],  
             baseCollisionShapeIndex=base_collision_shape,
@@ -424,65 +423,16 @@ class SimulationNode(Node):
             self.get_logger().error("No joints found in the created robot.")
             return
 
-        # Retrieve dynamics parameters
-        world_box_dynamics = self.dynamics_config['world_box']
-        pedestal_dynamics = self.dynamics_config['pedestal']
 
-        base_inertia = self.structure_config['world_box']['inertia']
-        pedestal_inertia = self.structure_config['pedestal']['inertia']
-
-        # Set dynamics parameters for the base and pedestal
-        p.changeDynamics(
-            self.robot_id, -1,
-            restitution=world_box_dynamics['restitution'],
-            lateralFriction=world_box_dynamics['lateralFriction'],
-            spinningFriction=world_box_dynamics['spinningFriction'],
-            rollingFriction=world_box_dynamics['rollingFriction'],
-            contactDamping=world_box_dynamics['contactDamping'],
-            contactStiffness=world_box_dynamics['contactStiffness'],
-            collisionMargin=0.01,
-            localInertiaDiagonal=base_inertia,
-            physicsClientId=self.client_id
-        )
-
-        p.changeDynamics(
-            self.robot_id, 0,  # Link index for the pedestal
-            restitution=pedestal_dynamics['restitution'],
-            lateralFriction=pedestal_dynamics['lateralFriction'],
-            spinningFriction=pedestal_dynamics['spinningFriction'],
-            rollingFriction=pedestal_dynamics['rollingFriction'],
-            contactDamping=pedestal_dynamics['contactDamping'],
-            contactStiffness=pedestal_dynamics['contactStiffness'],
-            collisionMargin=0.01,
-            localInertiaDiagonal=pedestal_inertia,
-            physicsClientId=self.client_id
-        )
-
-        # Print joint info
-        for joint_index in range(num_joints):
-            joint_info = p.getJointInfo(self.robot_id, joint_index, physicsClientId=self.client_id)
-            self.get_logger().info(f"Joint {joint_index} info: {joint_info}")
-
-        # Print link state
-        for link_index in range(num_joints):
-            link_state = p.getLinkState(self.robot_id, link_index, physicsClientId=self.client_id)
-            self.get_logger().info(f"Link {link_index} state: {link_state}")
 
 
 
 
     def spawn_pbr_on_pedestal(self):
         """
-        Spawns the Precariously Balanced Rock (PBR) on top of the pedestal. Handles both mesh and box configurations for the rock.
-
-        Arguments:
-            None
-
-        Returns:
-            bool: True if the rock was spawned successfully, False otherwise.
+        Spawns the Precariously Balanced Rock (PBR) on top of the pedestal and updates the pedestal's dynamics based on the PBR's properties.
         """
         try:
-
             if hasattr(self, 'rock_structure_mesh_config'):
                 urdf_path = self.rock_structure_mesh_config['mesh']
                 mesh_scale = self.rock_structure_mesh_config['meshScale']
@@ -518,6 +468,7 @@ class SimulationNode(Node):
                     contactStiffness=contactStiffness,
                     physicsClientId=self.client_id
                 )
+
             else:
                 dimensions = self.rock_structure_box_config['dimensions']
                 mass = self.rock_structure_box_config['mass']
@@ -554,7 +505,19 @@ class SimulationNode(Node):
                     physicsClientId=self.client_id
                 )
 
-           
+            # Update the pedestal dynamics based on the PBR dynamics
+            pbr_dynamics = self.retrieve_pbr_dynamics()
+            if pbr_dynamics:
+                p.changeDynamics(
+                    self.robot_id, 0,  # Link index for the pedestal
+                    contactDamping=pbr_dynamics['contactDamping'],
+                    contactStiffness=pbr_dynamics['contactStiffness'],
+                    physicsClientId=self.client_id
+                )
+                # Verify that the dynamics were set correctly
+                pedestal_dynamics_info = p.getDynamicsInfo(self.robot_id, 0, physicsClientId=self.client_id)
+                self.get_logger().info(f"Pedestal contactDamping: {pedestal_dynamics_info[8]}")
+                self.get_logger().info(f"Pedestal contactStiffness: {pedestal_dynamics_info[9]}")
 
             return True
 
@@ -659,7 +622,19 @@ class SimulationNode(Node):
             goal_handle.publish_feedback(feedback_msg)
             goal_handle.abort()
             return LoadPBR.Result(success=False)
-                
+
+    def retrieve_pbr_dynamics(self):
+        """Retrieve the contact damping and stiffness parameters for the PBR."""
+        if self.rock_id is not None:
+            dynamics_info = p.getDynamicsInfo(self.rock_id, -1, physicsClientId=self.client_id)
+            return {
+                'contactDamping': dynamics_info[8],  # Index 8 for contactDamping
+                'contactStiffness': dynamics_info[9],  # Index 9 for contactStiffness
+            }
+        else:
+            self.get_logger().error("PBR has not been loaded yet.")
+            return None
+           
 
 
     def execute_pose_trajectory_callback(self, goal_handle):
@@ -723,7 +698,7 @@ class SimulationNode(Node):
                 time_diff = self.engine_settings['timestep']
 
             # Step the simulation forward by the calculated time difference
-            num_steps = int(time_diff / 0.001)
+            num_steps = int(time_diff)
             for _ in range(num_steps):
                 p.stepSimulation(physicsClientId=self.client_id)
 
