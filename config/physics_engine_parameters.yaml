@@ -1,4 +1,4 @@
-simulation_node:
+/**:
   ros__parameters:
     engineSettings:
       gravity: [0.0, 0.0, -9.81]  
@@ -9,6 +9,6 @@ simulation_node:
       enableConeFriction: true
       deterministicOverlappingPairs: 1
       pedestal_reset_time : 1.0      
-      response_wait_time : 10.0
-      loading_wait_time : 10.0
+      response_wait_time : 5.0
+      loading_wait_time : 5.0
 

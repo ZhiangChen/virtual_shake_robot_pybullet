@@ -159,11 +159,13 @@ class DataLoader:
 
 def main():
     
-    package_share_directory = get_package_share_directory('virtual_shake_robot_pybullet')
-    
-    excel_file_path = os.path.join(package_share_directory, 'data', 'ASU_Shared_Scans', 'Shake_Table_Response', 'Earthquake_Records_Info.xlsx')
-    folder_path = os.path.join(package_share_directory, 'data', 'ASU_Shared_Scans', 'Shake_Table_Response')
-    pickle_file_path = os.path.join(package_share_directory, 'data', 'ASU_Shared_Scans', 'combined_data.pkl')
+    # Get the package share directory
+    ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
+
+    # Construct the paths relative to the workspace
+    excel_file_path = os.path.join(ros2_ws, 'virtual_shake_robot_pybullet', 'data', 'ASU_Shared_Scans', 'Shake_Table_Response', 'Earthquake_Records_Info.xlsx')
+    folder_path = os.path.join(ros2_ws, 'virtual_shake_robot_pybullet', 'data', 'ASU_Shared_Scans', 'Shake_Table_Response')
+    pickle_file_path = os.path.join(ros2_ws, 'virtual_shake_robot_pybullet', 'data', 'ASU_Shared_Scans', 'combined_data.pkl')
 
     # Initialize the DataLoader
     data_loader = DataLoader(

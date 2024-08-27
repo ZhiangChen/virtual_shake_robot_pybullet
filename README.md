@@ -9,7 +9,9 @@ The Virtual Shake Robot (VSR) V2.0 project is a simulation tool designed to stud
 We use PyBullet Python bindings for improved support for robotics, reinforcement learning and VR. Use pip install pybullet and checkout the [PyBullet Quickstart Guide](https://docs.google.com/document/d/10sXEhzFRSnvFcl3XxNGhnD4N2SedqwdAvK3dsihxVUA/edit#heading=h.2ye70wns7io3).
 
 
-# Installatiion Guide 
+# Installatiion Guide
+For the simulation to run on your system you need to have the ros2 humble version. So here is the installation guide for the ros2 humble in  the docs [ROS2_installation](docs/Ros_installation.md)
+
 Before installing PyBullet, ensure you have the following prerequisites installed on your system:
 
 - Python (3.6 or newer)
