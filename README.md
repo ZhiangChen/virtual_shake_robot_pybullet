@@ -9,6 +9,15 @@ The Virtual Shake Robot (VSR) V2.0 project is a simulation tool designed to stud
 We use PyBullet Python bindings for improved support for robotics, reinforcement learning and VR. Use pip install pybullet and checkout the [PyBullet Quickstart Guide](https://docs.google.com/document/d/10sXEhzFRSnvFcl3XxNGhnD4N2SedqwdAvK3dsihxVUA/edit#heading=h.2ye70wns7io3).
 
 
+Cloning the Repository and Setting up the Workspace
+
+To begin, clone the repository into your workspace. First, create a ROS2 workspace named ros2_ws if you don’t already have one:
+
+```
+mkdir -p ~/ros2_ws
+cd ~/ros2_ws
+git clone https://github.com/Akshay6077/virtual_shake_robot_pybullet.git
+```
 # Installatiion Guide
 For the simulation to run on your system you need to have the ros2 humble version. So here is the installation guide for the ros2 humble in  the docs [ROS2_installation](docs/Ros_installation.md)
 
@@ -64,14 +73,15 @@ print(pb.__version__)
  ros2 launch virtual_shake_robot_pybullet box_launch.py
 
  ```
- 5 . The action server in the control_node.py accpets Amplitude[A] and Frequency[F] values that are needed to determine the single_pulse consine motion for the pedestal
-```
- ros2 run virtual_shake_robot_pytbullet pulse_motion_client.py 2.0 1.0
+ ## Running the Control Node    
+
+ The control node accepts amplitude (A) and frequency (F) values to simulate a single-pulse cosine motion of the pedestal. To trigger the motion, run:
+ 
  ```
- This will send the A and F values for the motion of the pedestal to the control_node.py that generates the trajectory of the pedestal.
+ ros2 run virtual_shake_robot_pybullet pulse_motion_client.py 2.0 1.0
+```
 
- Using the A and F values, we use this formula to calculate the target postions, velocity for the pedestal and the acceleration required for the pedestal
-
+This command sends the A and F values to the control node, which generates the trajectory of the pedestal. The motion is calculated using the following equations:
 
  ```
    pulse motion
@@ -105,15 +115,14 @@ Similarly for the box :
 ```
 ros2 run virtual_shake_robot_pybullet pbr_loader.py box
 ```
-
-Both the properties for the mesh file and box are calucalted accurately the tutorial for calculating them from Fusion360 is present in [Inertia.md](docs/Inertia.md). Please refer that if you have any doubt for calculating the inetia values accurately for the mesh file(.obj).
+For more details on calculating inertia for mesh files, refer to [Inertia.md](docs/Inertia.md). 
 
 ![Pbr mesh file on pedestal](docs/pbr.png)
 
 
 ## Running the Experiment in Different Modes
 
-We have four distinct experiment modes that can be triggered by setting the motion_mode parameter. These modes dictate how the pedestal behaves during the experiment:
+There are four distinct experiment modes, which can be triggered by setting the motion_mode parameter.
 
 Single Cosine Mode: This mode applies a single cosine motion based on provided A and F values and is the default mode.
 
@@ -121,27 +130,16 @@ The implementation for this experiment is given above in the README.md
 
 Grid Cosine Mode : 
 
-This mode is similar to the single_pulse_cosine motion but it generates a range of A and F values from the defined PGV and PGV/PGA range of values.
-
-So after triggering this experiment the continous experiment will get triggered for the bunch of A and F values .
-
-To trigger the experiment :
+This mode generates a range of A and F values to simulate continuous experiments over a range of parameters.
 
 ```
 ros2 launch virtual_shake_robot_pybullet box_launch.py motion_mode:=grid_cosine
 ```
 Single Recording Mode:
 
-This mode is run on the experiment data, the actual data that we have collected our lab to verify the virtual environment.
+This mode runs experiments based on real data collected in the lab. Each test is conducted on the SP1 or SP2 mesh models, and the result (whether the rock toppled) is verified.
 
-This has the range of displacement  for the pedestal given in the file, there are multiple tests  conducted on the rock.
-
-There are two mesh models sp1 and sp2 mesh models on which the experiment were conducted.
-
-
-In this mode, you can send the particular test no to conduct, and check the output  that is whether the rock has topppled or not.
-
-You can send the particular test_no you want to exexute as an argument it is included in the launch argument.
+You can specify a particular test number:
 
 To trigger this :
 
@@ -158,9 +156,7 @@ ros2 run virtual_shake_robot_pybullet perception_node.py
 
 All Recording Mode :
 
-If you want to run all the tests from the start there is a method for that as well. It is similar to the single_recording_mode.
-
-To beign all the tests
+This mode runs all the recorded tests consecutively.
 
 ```
 ros2 launch virtual_shake_robot_pybullet sp1_launch.py motion_mode:=all_recordings
