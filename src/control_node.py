@@ -37,9 +37,9 @@ class ControlNode(Node):
         super().__init__('control_node')
         self.new_pose_received = False
         self.enable_plotting = self.declare_parameter('enable_plotting', False).value
-        self.time_step = self.declare_parameter('simulation_node.engineSettings.timeStep', 0.001).value
-        self.response_wait_time = self.declare_parameter('simulation_node.engineSettings.response_wait_time', 10.0).value
-        self.loading_wait_time = self.declare_parameter('simulation_node.engineSettings.loading_wait_time', 10).value
+        self.time_step = self.declare_parameter('engineSettings.timeStep', 0.001).value
+        self.response_wait_time = self.declare_parameter('engineSettings.response_wait_time', 5.0).value
+        self.loading_wait_time = self.declare_parameter('engineSettings.loading_wait_time', 5.0).value
         self.control_frequency = 1.0 / self.time_step
         self._trajectory_action_client = ActionClient(self, TrajectoryAction, 'trajectory_action')
         self._recording_action_client = ActionClient(self, RecordingAction, 'manage_recording')
@@ -216,7 +216,8 @@ class ControlNode(Node):
         Returns:
             None
         """
-        for test_no in range(11, 706):  # Test numbers from 011 to 705
+        self.spawn_initial_model()
+        for test_no in range(600, 605):  # Test numbers from 011 to 705
             self.get_logger().info(f"Starting experiment on Test No: {test_no}")
 
             # Extract PGV, PGA, and PGV/PGA for the current test
@@ -225,9 +226,9 @@ class ControlNode(Node):
                 pgv_to_pga = test_data['PGV/PGA']
                 pga = test_data['Scaled PGA']
 
-                # Start recording with the extracted values
-                self.send_recording_goal('start', pga, pgv_to_pga)
-                self.get_logger().info(f"Started recording for Test No: {test_no} with PGA: {pga} and PGV/PGA: {pgv_to_pga}")
+                # Start recording with the extracted values, including the test_no
+                self.send_recording_goal('start', pga, pgv_to_pga, test_no)
+                self.get_logger().info(f"Started recording for Test No: {test_no} with PGA: {pga}, PGV/PGA: {pgv_to_pga}, and Test No: {test_no}")
             else:
                 self.get_logger().error(f"No data available for Test No: {test_no}. Skipping this test.")
                 continue
@@ -254,17 +255,21 @@ class ControlNode(Node):
                         self.get_logger().info("The rock has not toppled.")
                 else:
                     self.get_logger().warning(f"No pose received for Test No: {test_no} after waiting.")
-
             else:
                 self.get_logger().error(f"Experiment on Test No: {test_no} failed or was not completed.")
 
-            self.send_recording_goal('stop', pga, pgv_to_pga)
+            self.send_recording_goal('stop', pga, pgv_to_pga, test_no)
             self.get_logger().info(f"Stopped recording for Test No: {test_no}.")
 
             self.get_logger().info(f"Completed Test No: {test_no}. Moving to the next test.")
+            
+            # Delete and respawn the model for the next test
+            self.delete_and_spawn_model()
+
+            # Reset the trajectory before the next test
+            self.reset_trajectory()
 
             rclpy.spin_once(self, timeout_sec=0.001)
-
     def plot_pgv_pga(self, pga, pgv_to_pga, toppled):
         """
         Plots the PGV vs PGA data, updating the visualization with toppling status.
@@ -277,6 +282,11 @@ class ControlNode(Node):
         Returns:
             None
         """
+
+        if not self.enable_plotting:
+            self.get_logger().info("Plotting is disabled.")
+            return
+        
         PGV = pga * pgv_to_pga
         PGA_g = pga / 9.807  
 
@@ -358,7 +368,10 @@ class ControlNode(Node):
             else:
                 self.get_logger().warning(f"No pose received for experiment {idx + 1}")
 
+            self.get_logger().info(f"Breaking here")
+
             self.delete_and_spawn_model()
+            self.reset_trajectory()
 
         self.get_logger().info(f"Completed all {len(FA_data)} experiments")
         self.send_recording_goal('stop', A, F)
@@ -406,31 +419,29 @@ class ControlNode(Node):
         result.success = True
         return result
 
-    def send_recording_goal(self, command, pga, pgv):
+    def send_recording_goal(self, command, pga, pgv, test_no):
         """
-        Sends a recording goal to the RecordingAction server.
+        Sends a recording goal to the PerceptionNode.
 
         Args:
-            command (str): The command to send ('start' or 'stop').
-            pga (float): The peak ground acceleration for the recording.
-            pgv (float): The peak ground velocity for the recording.
+            command (str): 'start' or 'stop' command.
+            pga (float): Peak Ground Acceleration value.
+            pgv (float): Peak Ground Velocity value.
+            test_no (int): The test number to include in the recording.
 
         Returns:
             None
         """
-        self.get_logger().info(f"Sending recording goal: {command}, PGA: {pga}, PGV: {pgv}")
-
+        self.get_logger().info(f"Sending {command} recording goal with PGA: {pga}, PGV: {pgv}, Test No: {test_no}")
         recording_goal = RecordingAction.Goal()
         recording_goal.command = command
         recording_goal.pga = pga
         recording_goal.pgv = pgv
+        recording_goal.test_no = float(test_no)
 
-        if not self._recording_action_client.wait_for_server(timeout_sec=10.0):
-            self.get_logger().error("Recording action server not available after waiting")
-            return
-
+        self._recording_action_client.wait_for_server()
         send_goal_future = self._recording_action_client.send_goal_async(recording_goal)
-        send_goal_future.add_done_callback(self.recording_goal_response_callback)
+        rclpy.spin_until_future_complete(self, send_goal_future)
 
     def recording_goal_response_callback(self, future):
         """

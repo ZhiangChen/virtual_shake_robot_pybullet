@@ -1,4 +1,4 @@
-simulation_node:
+/**:
   ros__parameters:
     structure:
       world_box:

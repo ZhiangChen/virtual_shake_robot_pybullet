@@ -68,12 +68,15 @@ class PerceptionNode(Node):
     def execute_callback(self, goal_handle: ServerGoalHandle):
         pga = goal_handle.request.pga
         pgv = goal_handle.request.pgv
-        self.get_logger().info(f"Received PGA: {pga}, PGV: {pgv}")
+        test_no = goal_handle.request.test_no
+        namespace = self.get_namespace().split('/')[-1]
+
+        self.get_logger().info(f"Received PGA: {pga}, PGV: {pgv}, Test No: {test_no}, Namespace: {namespace}")
 
         if goal_handle.request.command == 'start':
             self.start_recording()
         elif goal_handle.request.command == 'stop':
-            self.stop_recording(pga, pgv)
+            self.stop_recording(pga, pgv, test_no, namespace)
         goal_handle.succeed()
 
         result = RecordingAction.Result()
@@ -85,15 +88,15 @@ class PerceptionNode(Node):
         self.trajectory = []
         self.get_logger().info("Recording started...")
 
-    def stop_recording(self, pga, pgv):
+    def stop_recording(self, pga, pgv, test_no, namespace):
         self.recording = False
-        self.get_logger().info(f"Recording stopped. PGA: {pga}, PGV: {pgv}")
+        self.get_logger().info(f"Recording stopped. PGA: {pga}, PGV: {pgv}, Test No: {test_no}, Namespace: {namespace}")
 
         # Save the trajectory to a numpy file
         if self.trajectory:
             trajectory_np = np.array(self.trajectory)
-            file_name = f"trajectory_{time.time()}.npy"
-            recordings_folder = os.path.join(os.path.expanduser('~'), 'recordings')
+            file_name = f"trajectory_{namespace}_test_{int(test_no)}.npy"
+            recordings_folder = os.path.join(os.path.expanduser('~'), 'recordings', f"trajectory_{namespace}")
             os.makedirs(recordings_folder, exist_ok=True)
             file_path = os.path.join(recordings_folder, file_name)
             np.save(file_path, trajectory_np)

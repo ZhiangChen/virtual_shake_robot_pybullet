@@ -177,3 +177,18 @@ launch/log
 src/example.py
 src/combined_data.pkl
 
+
+# Ignore all generated launch files with numeric suffix (e.g., sp1_0.launch.py to sp1_95.launch.py)
+ros2_ws/virtual_shake_robot_pybullet/launch/sp1_*.launch.py
+ros2_ws/virtual_shake_robot_pybullet/launch/sp2_*.launch.py
+ros2_ws/virtual_shake_robot_pybullet/launch/pbr_mesh_*.launch.py
+
+# Exclude important launch files from being ignored
+!ros2_ws/virtual_shake_robot_pybullet/launch/sp1_launch.py
+!ros2_ws/virtual_shake_robot_pybullet/launch/sp2_launch.py
+!ros2_ws/virtual_shake_robot_pybullet/launch/mesh_launch.py
+!ros2_ws/virtual_shake_robot_pybullet/launch/box_launch.py
+
+
+ros2_ws/virtual_shake_robot_pybullet/launch/sp1_*.yaml
+

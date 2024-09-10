@@ -74,17 +74,20 @@ class SimulationNode(Node):
         self.declare_parameter('realtime_flag', True)
 
         self.realtime_flag = self.get_parameter('realtime_flag').value
-        self.declare_parameter('enable_plotting', True)  # Declare as a ROS2 parameter
+        self.declare_parameter('enable_plotting', False)  # Declare as a ROS2 parameter
         self.enable_plotting = self.get_parameter('enable_plotting').value
         
 
 
 
+     
+        
+       
         # Declaring parameters
         self.declare_parameters(
             namespace="",
             parameters=[
-                ('simulation_node.engineSettings.loading_wait_time', rclpy.Parameter.Type.DOUBLE),
+                ('engineSettings.loading_wait_time', rclpy.Parameter.Type.DOUBLE),
                 ('engineSettings.gravity', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('engineSettings.timeStep', rclpy.Parameter.Type.DOUBLE),
                 ('engineSettings.useSplitImpulse', rclpy.Parameter.Type.BOOL),
@@ -206,6 +209,7 @@ class SimulationNode(Node):
 
         }
 
+
    
         self.client_id = self.server_connection()
 
@@ -220,22 +224,27 @@ class SimulationNode(Node):
 
         self.setup_simulation()
         self.create_robot()
-        self.spawn_pbr_on_pedestal()
+        # self.spawn_pbr_on_pedestal()
 
-    def server_connection(self):
+    def server_connection(self, use_gui=True):
         """
-        Establishes a connection to the PyBullet GUI.
+        Establishes a connection to the PyBullet server with an optional GUI.
 
         Arguments:
-            None
+            use_gui (bool): If True, connects to PyBullet with GUI; otherwise, connects in DIRECT mode.
 
         Returns:
             client_id (int): The ID of the PyBullet client.
         """
-        client_id = p.connect(p.GUI)  # Will return a client ID
+        if use_gui:
+            client_id = p.connect(p.GUI)
+        else:
+            client_id = p.connect(p.DIRECT)  # No GUI
+
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         self.get_logger().info(f"The Client_id is : {client_id}")
         return client_id
+
 
     def setup_simulation(self):
         '''this helps to setup the simulation using the physics_engine parmeters file'''
@@ -276,7 +285,7 @@ class SimulationNode(Node):
             response (ManageModel.Response): Updated service response after processing the request.
         """
         self.get_logger().info(f"manage_model_callback called with action: {request.action}")
-        model_wait_time = self.get_parameter('simulation_node.engineSettings.loading_wait_time').value
+        model_wait_time = self.get_parameter('engineSettings.loading_wait_time').value
         time_step = self.engine_settings['timestep']
 
         if request.action == "spawn":
@@ -327,7 +336,8 @@ class SimulationNode(Node):
             response.message = "Unknown action."
             self.get_logger().info(response.message)  # Log the unknown action
 
-   
+        return response
+    
     def create_robot(self):
         """Creates the robot model in the PyBullet simulation based on the configuration."""
         self.get_logger().info("Loading the VSR_shake_table...")
@@ -680,15 +690,19 @@ class SimulationNode(Node):
 
             if i < len(timestamps) - 1:
                 # Calculate the time difference between the current and next timestamp
-                time_diff = timestamps[i + 1] - timestamps[i]
+                time_diff = float(timestamps[i + 1]) - float(timestamps[i])
+                
                 if time_diff <= 0:
                     time_diff = self.engine_settings['timestep']
+                    
             else:
                 # Manually set the timestep for the last element
                 time_diff = self.engine_settings['timestep']
 
             # Step the simulation forward by the calculated time difference
-            num_steps = int(time_diff)
+            num_steps = int(time_diff / self.engine_settings['timestep'])
+    
+            # self.get_logger().info(f"the time difference is : {num_steps}")
             for _ in range(num_steps):
                 p.stepSimulation(physicsClientId=self.client_id)
 

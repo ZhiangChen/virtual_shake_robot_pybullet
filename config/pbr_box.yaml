@@ -1,4 +1,4 @@
-simulation_node:
+/**:
   ros__parameters:
     rock_structure_box:
       dimensions: [1.0, 2.0, 3.0]
