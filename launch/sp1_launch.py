@@ -18,7 +18,7 @@ def generate_launch_description():
     
     ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
 
-    config_directory = os.path.join(ros2_ws, 'virtual_shake_robot_pybullet/config')
+    config_directory = os.path.join(ros2_ws, 'src/virtual_shake_robot_pybullet/config')
 
     physics_engine_parameters_path = os.path.join(config_directory, 'physics_engine_parameters.yaml')
     physics_parameters_path = os.path.join(config_directory, 'physics_parameters.yaml')
@@ -27,7 +27,7 @@ def generate_launch_description():
     sp1_mesh_structure_path = os.path.join(config_directory, 'sp1.yaml')
     
     # Define URDF file path with a placeholder
-    urdf_file_path = os.path.join('{{ROS2_WS}}', 'virtual_shake_robot_pybullet/models/SP1_PBRmodel/sp1.urdf')
+    urdf_file_path = os.path.join('{{ROS2_WS}}', 'src/virtual_shake_robot_pybullet/models/SP1_PBRmodel/sp1.urdf')
 
     def replace_placeholders(file_path, placeholder, value):
         with open(file_path, 'r') as file:

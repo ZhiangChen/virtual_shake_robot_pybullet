@@ -1,6 +1,7 @@
 # Goal definition
 float64[] positions
 float64[] timestamps
+int64 test_no
 
 ---
 # Result definition

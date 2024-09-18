@@ -49,7 +49,7 @@ def generate_launch_description():
     ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
 
     # Define the configuration directory using the workspace path
-    config_directory = os.path.join(ros2_ws, 'virtual_shake_robot_pybullet/config')
+    config_directory = os.path.join(ros2_ws, 'src/virtual_shake_robot_pybullet/config')
 
     # Define paths to the configuration files with placeholders
     physics_engine_parameters_path = os.path.join(config_directory, 'physics_engine_parameters.yaml')
@@ -59,7 +59,7 @@ def generate_launch_description():
     pbr_mesh_structure_path = os.path.join(config_directory, 'pbr_mesh.yaml')
     
     # Define URDF file path with a placeholder
-    urdf_file_path = os.path.join('{{ROS2_WS}}', 'virtual_shake_robot_pybullet/models/double_rock_pbr/pbr_mesh.urdf')
+    urdf_file_path = os.path.join('{{ROS2_WS}}', 'src/virtual_shake_robot_pybullet/models/double_rock_pbr/pbr_mesh.urdf')
 
     # Function to replace placeholders in the YAML files
     def replace_placeholders(file_path, placeholder, value):

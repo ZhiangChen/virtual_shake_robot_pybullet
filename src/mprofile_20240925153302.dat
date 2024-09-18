@@ -1,0 +1,10 @@
+CMDLINE /usr/bin/python3 /home/akshay/ros2_ws/install/virtual_shake_robot_pybullet/lib/virtual_shake_robot_pybullet/simulation_node.py --ros-args -r __node:=simulation_node -r __ns:=/sim_96/sim_96
+MEM 5.125000 1727303582.3585
+MEM 22.886719 1727303582.4588
+MEM 39.113281 1727303582.5592
+MEM 55.933594 1727303582.6595
+MEM 59.433594 1727303582.7598
+MEM 64.433594 1727303582.8601
+MEM 72.878906 1727303582.9605
+MEM 78.003906 1727303583.0608
+MEM 84.628906 1727303583.1625
