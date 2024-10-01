@@ -1,6 +1,6 @@
 ## Overview
 
-In the Virtual Shake Robot (VSR) simulation, we have experienced memory leakage, especially during long-running or parallel simulations. This was mainly caused by the continuous recording of simulation data (such as positions and PBR poses) over time, leading to increased memory usage. To address this, we implemented an improved setup to manage memory more effectively, by integrating the recording process directly into the simulation_node.py instead of using the perception node.
+In the Virtual Shake Robot (VSR) simulation, we have experienced memory leakage, especially during long-running or parallel simulations. 
 
 ## New Setup to Prevent Memory Leakage
 
@@ -29,6 +29,8 @@ gc.collect()
 
     ```
 - Separate Plotting Script: Previously, the plotting function was embedded within the execute_position_trajectory_callback, which contributed to memory leakage due to unclosed figures. To resolve this, we moved the plotting functionality to a separate script called plotter.py. This script can be used to compare the actual vs. desired trajectory after the simulation has been completed, freeing the simulation node from the memory overhead of handling plots.
+
+- Loading and Deleting URDF Models: Repeated loading and deletion of URDF models caused memory fragmentation, and the deletion of models did not clear memory properly. Specifically, PyBullet does not clear memory after deleting a model, which further contributed to memory leaks during multiple load/delete cycles of models.
 
 You can run plotter.py to visualize and analyze the results once the simulation is finished.
 

@@ -249,7 +249,15 @@ Follow Similar steps as the docker container
 
 # Memory Leakage Issue
 
-During the Virtual Shake Robot (VSR) simulations, a memory leakage issue was observed, especially in long-running or parallel experiments. This issue was mainly due to continuous data logging processes, where trajectory data was recorded over time, leading to increased memory usage.
+Memory Leakage Issue
+
+During the Virtual Shake Robot (VSR) simulations, a memory leakage issue was observed, especially in long-running or parallel experiments. The memory leakage was caused by several factors, including:
+
+- Data Recording: Continuous data logging, where trajectory data was recorded over time, contributed to increased memory usage.
+- Creating and Deleting Plots: The callback function included the creation and deletion of plots, which were not properly managed, leading to memory leaks.
+- Loading and Deleting URDF Models: Repeated loading and deletion of URDF models contributed to memory fragmentation and memory leaks.
+
+To mitigate these issues, changes were made to the simulation node to handle the data recording more efficiently, as well as moving the plotting function to a separate script (plotter.py) to avoid creating plots inside the callback function. Additionally, improvements were made in the management of URDF models to ensure they are loaded and deleted correctly.
 
 ## New Setup
 
