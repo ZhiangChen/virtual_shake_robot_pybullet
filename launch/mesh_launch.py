@@ -11,7 +11,7 @@ def generate_launch_description():
     ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
 
     # Define the configuration directory using the workspace path
-    config_directory = os.path.join(ros2_ws, 'virtual_shake_robot_pybullet/config')
+    config_directory = os.path.join(ros2_ws, 'src/virtual_shake_robot_pybullet/config')
 
     # Define paths to the configuration files with placeholders
     physics_engine_parameters_path = os.path.join(config_directory, 'physics_engine_parameters.yaml')

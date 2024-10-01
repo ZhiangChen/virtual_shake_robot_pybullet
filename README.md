@@ -166,13 +166,111 @@ Similarly launch the perception_node.py
 
 
 
+## Parallel Simulation
+
+The parallel simulation feature allows you to test different combinations of parameters simultaneously by leveraging multiple namespaces. This is particularly useful for running multiple instances of the experiment concurrently, reducing the time it takes to evaluate a wide range of physics parameters and their effects on PBR dynamics.
+
+## Namespaced Simulations
+
+By defining each simulation under its own namespace, we eliminate the need to generate separate YAML files for each experiment. This ensures that each simulation runs independently, even though the parameters and results are stored in shared directories. The use of ROS2 launch files enables seamless namespace management for multiple simulations.
+
+To set up the parallel simulation:
+
+1 .Generate YAML and Launch Files for Each Namespace:
+ 
+ The script_generator.py automatically generates the required YAML files for each parameter combination and creates corresponding launch files under different namespaces.
+
+```
+ros2 run virtual_shake_robot_pybullet script_generator.py
+```
+This script will:
+
+- Generate YAML files with combinations of physics parameters for each experiment.
+- Create corresponding launch files for each generated YAML file.
+- Additionally, create a master launch file (e.g., {mesh_file_name}_master_launch.py) that launches all simulations in parallel.`
+
+2. Run the Master Launch File:
+
+```
+ros2 launch virtual_shake_robot_pybullet {mesh_file_name}_master_launch.py
+```
+
+3. Monitor the results
+
+    Each simulation will log its results in separate files, organized by namespace. This allows you to later compare the behaviors of PBRs across different parameter combinations.
 
 
 
+# Running Parallel Simulations on a Server (Manual Setup)
+
+If you need to run the parallel simulations on a server with more computational power, you can manually set up the environment using a base ROS2 Docker image or build your own Dockerfile. Here's a step-by-step guide:
+
+## 1. Using a Pre-Built ROS2 Docker Image
+
+Start by pulling a base ROS2 Docker image that includes the ROS2 Humble release:
+```bash
+docker pull osrf/ros:humble-desktop
+```
+Manual Setup:
+
+Once you have the image, you will need to install the following dependencies manually:
+
+    pip (for Python package management)
+    pybullet
+    Any other dependencies required by your project.
 
 
+start the docker container :
+
+```
+docker run -it --name vsr_ros2_simulation osrf/ros:humble-desktop
+```
+
+This will start the container with the dependencies.
+
+So now follow the README.md for the vsr setup
 
 
+Apptainer (formerly Singularity): Apptainer is more suited for shared server environments where you might not have root or sudo access, as it runs containers in a user space.
+
+- Convert the docker image to an Apptainer Image
+
+```
+apptainer build vsr_simulation.sif docker://vsr_simulation
+
+```
+ - Run the container
+
+```
+apptainer run vsr_simulation.sif
+```
+
+Follow Similar steps as the docker container
+
+# Memory Leakage Issue
+
+Memory Leakage Issue
+
+During the Virtual Shake Robot (VSR) simulations, a memory leakage issue was observed, especially in long-running or parallel experiments. The memory leakage was caused by several factors, including:
+
+- Data Recording: Continuous data logging, where trajectory data was recorded over time, contributed to increased memory usage.
+- Creating and Deleting Plots: The callback function included the creation and deletion of plots, which were not properly managed, leading to memory leaks.
+- Loading and Deleting URDF Models: Repeated loading and deletion of URDF models contributed to memory fragmentation and memory leaks.
+
+To mitigate these issues, changes were made to the simulation node to handle the data recording more efficiently, as well as moving the plotting function to a separate script (plotter.py) to avoid creating plots inside the callback function. Additionally, improvements were made in the management of URDF models to ensure they are loaded and deleted correctly.
+
+## New Setup
+
+To mitigate the memory leakage, we introduced a new setup where the perception node is no longer required for recording data. Instead, the recording process has been integrated directly into the simulation node. This change reduces memory overhead by avoiding the constant communication between nodes and streamlining the logging of trajectory data.
+
+In the new setup, the trajectory is executed within the simulation node, and after each execution, the data is immediately saved to an .npy file. The memory used during the process is explicitly cleared to prevent any leakage.
+
+## Original Setup Option
+
+If you are not experiencing any memory leakage in your current setup, or if your experiments are running without memory issues, you can continue using the original setup. In this case, you can keep using the perception node for recording trajectory data as described in the README.md file.
+
+For more technical details on how the new setup works and how to adjust your implementation, refer to the full report here.
+[Memory_Issue_report](docs/Memory_Issue.md)
 
 
 

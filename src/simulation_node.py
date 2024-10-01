@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
+import objgraph
+import gc
+import os
 import rclpy
 import pybullet as p
 import pybullet_data
 import time
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from rclpy.node import Node
@@ -15,6 +19,7 @@ from rclpy.service import Service
 from std_srvs.srv import Empty
 from std_srvs.srv import SetBool
 from virtual_shake_robot_pybullet.srv import ManageModel
+from memory_profiler import profile
 
 class SimulationNode(Node):
 
@@ -38,7 +43,7 @@ class SimulationNode(Node):
             self,
             TrajectoryAction,
             'trajectory_action',
-            execute_callback=self.execute_trajectory_callback
+            execute_callback=self.execute_pos_vel_trajectory_callback
         )
         self._load_pbr_action_server = ActionServer(
             self,
@@ -50,7 +55,7 @@ class SimulationNode(Node):
             self,
             LoadDispl,
             'load_displ_action',
-            execute_callback=self.execute_pose_trajectory_callback
+            execute_callback=self.execute_position_trajectory_callback
 
         )
 
@@ -64,8 +69,16 @@ class SimulationNode(Node):
         self.desired_position_publisher = self.create_publisher(Float64, 'desired_position_topic', 10)
         self.desired_velocity_publisher = self.create_publisher(Float64, 'desired_velocity_topic', 10)
 
-        # PBR rock state publisher
-        self.pbr_pose_publisher = self.create_publisher(PoseStamped, 'pbr_pose_topic', 10)
+
+        full_namespace = self.get_namespace()
+        sim_no = full_namespace.split('/')[1]
+        
+        self.get_logger().info(f"Using namespace: {full_namespace}, sim_no: {sim_no}")
+        
+        # Publishers
+        self.position_publisher = self.create_publisher(Float64, f'/{sim_no}/{sim_no}/pedestal_position_publisher', 10)
+        self.velocity_publisher = self.create_publisher(Float64, f'/{sim_no}/{sim_no}/pedestal_velocity_publisher', 10)
+        self.pbr_pose_publisher = self.create_publisher(PoseStamped, f'/{sim_no}/{sim_no}/pbr_pose_topic', 10)
 
 
         self._manage_model_service = self.create_service(ManageModel, 'manage_model', self.manage_model_callback)
@@ -77,13 +90,7 @@ class SimulationNode(Node):
         self.declare_parameter('enable_plotting', False)  # Declare as a ROS2 parameter
         self.enable_plotting = self.get_parameter('enable_plotting').value
         
-
-
-
-     
-        
-       
-        # Declaring parameters
+        #Declare parameters
         self.declare_parameters(
             namespace="",
             parameters=[
@@ -213,12 +220,7 @@ class SimulationNode(Node):
    
         self.client_id = self.server_connection()
 
-        ## To store the values for the plot
-        self.desired_positions = []
-        self.desired_velocities = []
-        self.actual_positions = []
-        self.actual_velocities = []
-        self.timestamps = []
+
 
         self.rock_id = None
 
@@ -273,6 +275,7 @@ class SimulationNode(Node):
         physics_params = p.getPhysicsEngineParameters(physicsClientId=self.client_id)
         self.get_logger().info(f"physics Parameters : {physics_params}")
 
+
     def manage_model_callback(self, request, response):
         """
         Callback function for the 'manage_model' service. Handles spawning and deleting the model in the simulation.
@@ -301,6 +304,41 @@ class SimulationNode(Node):
                 response.success = True
                 response.message = f"Rock model loaded with ID: {self.rock_id}"
                 self.get_logger().info(response.message)  # Log the success message
+
+                mass = self.rock_structure_mesh_config['mass']
+                restitution = self.rock_structure_mesh_config['restitution']
+                lateralFriction = self.rock_structure_mesh_config['lateralFriction']
+                spinningFriction = self.rock_structure_mesh_config['spinningFriction']
+                rollingFriction = self.rock_structure_mesh_config['rollingFriction']
+                contactDamping = self.rock_structure_mesh_config['contactDamping']
+                contactStiffness = self.rock_structure_mesh_config['contactStiffness']
+
+
+                p.changeDynamics(
+                    self.rock_id, -1,
+                    mass=mass,
+                    restitution=restitution,
+                    lateralFriction=lateralFriction,
+                    spinningFriction=spinningFriction,
+                    rollingFriction=rollingFriction,
+                    contactDamping=contactDamping,
+                    contactStiffness=contactStiffness,
+                    physicsClientId=self.client_id
+                )
+
+                self.intial_postion,self.intial_orientation = p.getBasePositionAndOrientation(self.rock_id, physicsClientId = self.client_id)
+
+
+                dynamics_info = p.getDynamicsInfo(self.rock_id, -1)
+                
+                   
+                self.get_logger().info(f"Mass: {dynamics_info[0]}")
+                self.get_logger().info(f"Lateral Friction: {dynamics_info[1]}")
+                self.get_logger().info(f"Restitution: {dynamics_info[5]}")
+                self.get_logger().info(f"Rolling Friction: {dynamics_info[6]}")
+                self.get_logger().info(f"Spinning Friction: {dynamics_info[7]}")
+                self.get_logger().info(f"Contact Damping: {dynamics_info[8]}")
+                self.get_logger().info(f"Contact Stiffness: {dynamics_info[9]}")
 
                 # Wait after spawning the model
                 self.get_logger().info(f'Waiting for {model_wait_time} seconds after model spawn.')
@@ -331,6 +369,31 @@ class SimulationNode(Node):
                 response.success = False
                 response.message = "No rock model to delete."
                 self.get_logger().info(response.message)  # Log the failure message
+
+        elif request.action == "reset":
+            if self.rock_id is not None:
+                
+                p.resetBasePositionAndOrientation(
+                    self.rock_id,
+                    self.intial_postion,
+                    self.intial_orientation,
+                    physicsClientId = self.client_id
+                )
+                response.success = True
+                response.message = f"Rock model with {self.rock_id} has been reset"
+                self.get_logger().info(f"Rock model with {self.rock_id} has been reset")
+
+                p.setJointMotorControl2(
+                        bodyUniqueId=self.robot_id,
+                        jointIndex=0,
+                        controlMode=p.POSITION_CONTROL,
+                        targetPosition=0,
+                        targetVelocity=0,
+                        force=5 * 10**8,
+                        maxVelocity=200,
+                        physicsClientId=self.client_id
+                    )
+
         else:
             response.success = False
             response.message = "Unknown action."
@@ -428,6 +491,9 @@ class SimulationNode(Node):
         # Verify the number of joints
         num_joints = p.getNumJoints(self.robot_id, physicsClientId=self.client_id)
         self.get_logger().info(f"Number of joints in the robot: {num_joints}")
+
+        pedestal_dynamics = p.getDynamicsInfo(self.robot_id, 0)
+        self.get_logger().info(f"The pedestal Dynamics are : {pedestal_dynamics}")
 
         if num_joints == 0:
             self.get_logger().error("No joints found in the created robot.")
@@ -634,10 +700,8 @@ class SimulationNode(Node):
             goal_handle.publish_feedback(feedback_msg)
             goal_handle.abort()
             return LoadPBR.Result(success=False)
-
-
-
-    def execute_pose_trajectory_callback(self, goal_handle):
+        
+    def execute_position_trajectory_callback(self, goal_handle):
         """
         Executes the trajectory based on the positions and timestamps provided in the LoadDispl action goal.
 
@@ -647,17 +711,20 @@ class SimulationNode(Node):
         Returns:
             result (LoadDispl.Result): The result of the action, indicating success or failure.
         """
+
         self.logger.info("Received LoadDispl action goal...")
 
         positions = goal_handle.request.positions
         timestamps = goal_handle.request.timestamps
+        test_no = goal_handle.request.test_no
 
         feedback_msg = LoadDispl.Feedback()
 
-        # Initialize lists to store data for plotting
+        # Initialize lists to store data for plotting and saving
         target_positions = []
         actual_positions = []
         simulation_timestamps = []
+        simulation_data = []  # This will contain all the relevant data
 
         self.logger.info(f"Executing LoadDispl with {len(positions)} positions and {len(timestamps)} timestamps...")
 
@@ -684,25 +751,40 @@ class SimulationNode(Node):
             joint_state = p.getJointState(self.robot_id, 0)
             actual_position = joint_state[0]
 
-            # Store the positions for plotting
+            # Store positions for plotting and saving
             target_positions.append(current_position)
             actual_positions.append(actual_position)
 
+            # Get the pose of the PBR model and save the pose information
+            if self.rock_id is not None:
+                pbr_position, pbr_orientation = p.getBasePositionAndOrientation(self.rock_id, physicsClientId=self.client_id)
+            
+    
+
+            # Append data to simulation_data (to be saved later: timestamp, target position, actual position, PBR pose)
+            simulation_data.append([
+                timestamps[i],
+                current_position,
+                actual_position,
+                pbr_position[0], pbr_position[1], pbr_position[2],
+                pbr_orientation[0], pbr_orientation[1], pbr_orientation[2], pbr_orientation[3]
+
+            ])
+        
+
+            # Publish the actual joint state
+            # self.position_publisher.publish(Float64(data=actual_position))
+
+            # Calculate the time difference for the next step
             if i < len(timestamps) - 1:
-                # Calculate the time difference between the current and next timestamp
                 time_diff = float(timestamps[i + 1]) - float(timestamps[i])
-                
                 if time_diff <= 0:
                     time_diff = self.engine_settings['timestep']
-                    
             else:
-                # Manually set the timestep for the last element
                 time_diff = self.engine_settings['timestep']
 
             # Step the simulation forward by the calculated time difference
             num_steps = int(time_diff / self.engine_settings['timestep'])
-    
-            # self.get_logger().info(f"the time difference is : {num_steps}")
             for _ in range(num_steps):
                 p.stepSimulation(physicsClientId=self.client_id)
 
@@ -719,42 +801,38 @@ class SimulationNode(Node):
             feedback_msg.current_timestamp = timestamps[i]
             goal_handle.publish_feedback(feedback_msg)
 
+        # After the loop, save the simulation data to a numpy file
+        ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
+        recordings_folder = os.path.join(ros2_ws,'src' ,'virtual_shake_robot_pybullet', 'recordings_new')
+        os.makedirs(recordings_folder, exist_ok=True)
+
+        full_namespace = self.get_namespace()
+        sim_no = full_namespace.split('/')[1]
+
+        # Generate a unique file name with test_no and namespace
+        file_name = f"trajectory_{sim_no}_test_{int(test_no)}.npy"
+        file_path = os.path.join(recordings_folder, file_name)
+
+        # Save the simulation data to a numpy file (timestamps, target_positions, actual_positions, pbr_poses)
+        self.get_logger().info(f"Length of the .npy file(before): {len(simulation_data)}")
+        np.save(file_path, np.array(simulation_data))
+        self.get_logger().info(f"Simulation data saved to {file_path}")
+        del simulation_data
+        gc.collect()
+
         end_time = time.time()
         self.logger.info(f"Total execution time: {end_time - start_time} seconds")
 
         self.logger.info("LoadDispl action execution completed.")
 
-        # Get the pose of the object (e.g., the PBR model)
-        if self.rock_id is not None:
-            pbr_position, pbr_orientation = p.getBasePositionAndOrientation(self.rock_id, physicsClientId=self.client_id)
-            
-            # Create a PoseStamped message
-            pose_msg = PoseStamped()
-            pose_msg.header.stamp = self.get_clock().now().to_msg()
-            pose_msg.header.frame_id = "world"
-            
-            pose_msg.pose.position.x = pbr_position[0]
-            pose_msg.pose.position.y = pbr_position[1]
-            pose_msg.pose.position.z = pbr_position[2]
-            pose_msg.pose.orientation.x = pbr_orientation[0]
-            pose_msg.pose.orientation.y = pbr_orientation[1]
-            pose_msg.pose.orientation.z = pbr_orientation[2]
-            pose_msg.pose.orientation.w = pbr_orientation[3]
+        target_positions.clear()
+        actual_positions.clear()
+        simulation_timestamps.clear()
 
-            # Publish the pose
-            self.pbr_pose_publisher.publish(pose_msg)
-
-        # Plot the results after the simulation is complete if plotting is enabled
+        # Optionally show the plot if plotting is enabled
         if self.enable_plotting:
-            plt.figure()
-            plt.plot(simulation_timestamps, target_positions, label='Target Position')
-            plt.plot(simulation_timestamps, actual_positions, '--', label='Actual Position')
-            plt.xlabel('Time (s)')
-            plt.ylabel('Position')
-            plt.title('Target vs Actual Position')
-            plt.legend()
-            plt.grid(True)
             plt.show()
+        
 
         goal_handle.succeed()
         result = LoadDispl.Result()
@@ -763,8 +841,7 @@ class SimulationNode(Node):
 
 
 
-
-    def execute_trajectory_callback(self, goal_handle):
+    def execute_pos_vel_trajectory_callback(self, goal_handle):
         """
         Executes the trajectory from the data received in the TrajectoryAction goal.
 
@@ -775,6 +852,15 @@ class SimulationNode(Node):
             result (TrajectoryAction.Result): The result of the action, including the actual positions and velocities after execution.
         """
         self.logger.info("Executing trajectory callback...")
+
+
+        desired_positions = []
+        desired_velocities = []
+
+
+        desired_positions.clear()
+        desired_velocities.clear()
+        
 
         client_id = self.client_id
         robot_id = goal_handle.request.robot_id
@@ -793,17 +879,17 @@ class SimulationNode(Node):
         self.get_logger().info(f"Length of the trajectory: {len(positions)}")
         time_step = self.engine_settings['timestep']
 
-        self.actual_positions = []
-        self.actual_velocities = []
+        actual_positions = []
+        actual_velocities = []
 
         loop_start_time = time.time()  # Record the start time of the loop
 
         for i in range(len(timestamps)):
             iteration_start_time = time.time()  # Record the start time of this iteration
 
-            self.desired_positions.append(positions[i])
-            self.desired_velocities.append(velocities[i])
-            self.timestamps.append(timestamps[i])
+            desired_positions.append(positions[i])
+            desired_velocities.append(velocities[i])
+            timestamps.append(timestamps[i])
 
             self.desired_position_publisher.publish(Float64(data=positions[i]))
             self.desired_velocity_publisher.publish(Float64(data=velocities[i]))
@@ -823,11 +909,13 @@ class SimulationNode(Node):
             p.stepSimulation(physicsClientId=client_id)
 
             # Capture the actual joint state
+            actual_positions.clear()
+            actual_velocities.clear()
             joint_state = p.getJointState(robot_id, 0, physicsClientId=client_id)
             actual_position, actual_velocity = joint_state[0], joint_state[1]
 
-            self.actual_positions.append(actual_position)
-            self.actual_velocities.append(actual_velocity)
+            actual_positions.append(actual_position)
+            actual_velocities.append(actual_velocity)
 
             # Publish the actual position and velocity
             self.position_publisher.publish(Float64(data=actual_position))
@@ -845,6 +933,8 @@ class SimulationNode(Node):
 
             if self.realtime_flag and sleep_time > 0:
                 time.sleep(sleep_time)
+
+        
 
         loop_end_time = time.time()  # Record the end time of the loop
         total_execution_time = loop_end_time - loop_start_time  # Calculate the total execution time
@@ -881,9 +971,11 @@ class SimulationNode(Node):
         goal_handle.succeed()
         result = TrajectoryAction.Result()
         result.success = True
-        result.actual_positions = self.actual_positions
-        result.actual_velocities = self.actual_velocities
+        result.actual_positions = actual_positions
+        result.actual_velocities = actual_velocities
         return result
+      
+
 
 
 

@@ -13,22 +13,36 @@ import matplotlib.pyplot as plt
 from math import pi
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.action.server import ServerGoalHandle
+from std_msgs.msg import Float64
 
 class PerceptionNode(Node):
     def __init__(self):
         super().__init__('perception_node')
         self.get_logger().info("Initializing Perception Node...")
 
-        # Set up subscription for pbr_pose
+        full_namespace = self.get_namespace()
+        sim_no = full_namespace.split('/')[1]  # Extracts 'sim_96'
+
+        self.get_logger().info(f"Using namespace: {full_namespace}, sim_no: {sim_no}")
+        
+        # Subscriptions
+        self.pedestal_position_subscription = self.create_subscription(
+            Float64,
+            f'/{sim_no}/{sim_no}/pedestal_position_publisher', 
+            self.pedestal_position_callback,
+            10
+        )
+        
         self.pbr_pose_subscription = self.create_subscription(
             PoseStamped,
-            'pbr_pose_topic',
+            f'/{sim_no}/{sim_no}/pbr_pose_topic', 
             self.pbr_pose_callback,
             10
         )
 
         self.recording = False
         self.trajectory = []
+        self.timer = self.create_timer(0.1, self.append_to_trajectory)
         self.toppling_data = []
         self.latest_pose = None
 
@@ -46,16 +60,24 @@ class PerceptionNode(Node):
 
     def pbr_pose_callback(self, msg):
         self.latest_pose = msg.pose
-        if self.recording:
+        
+    def append_to_trajectory(self):
+        if self.recording and self.latest_pose and self.latest_pedestal_position:
             # Append the pose information to the trajectory
-            time_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
-            position = msg.pose.position
-            orientation = msg.pose.orientation
+            time_stamp = self.get_clock().now().seconds_nanoseconds()[0] + self.get_clock().now().seconds_nanoseconds()[1] * 1e-9
+            position = self.latest_pose.position
+            orientation = self.latest_pose.orientation
             self.trajectory.append([
                 time_stamp,
                 position.x, position.y, position.z,
-                orientation.x, orientation.y, orientation.z, orientation.w
+                orientation.x, orientation.y, orientation.z, orientation.w,
+                self.latest_pedestal_position
             ])
+            
+            
+    def pedestal_position_callback(self, msg):
+        # self.get_logger().info(f"Received pedestal position: {msg.data}")
+        self.latest_pedestal_position = msg.data 
 
     def goal_callback(self, goal_request):
         self.get_logger().info('Received recording management request')
@@ -87,10 +109,15 @@ class PerceptionNode(Node):
         self.recording = True
         self.trajectory = []
         self.get_logger().info("Recording started...")
+        self.timer = self.create_timer(0.1, self.append_to_trajectory)
 
     def stop_recording(self, pga, pgv, test_no, namespace):
         self.recording = False
         self.get_logger().info(f"Recording stopped. PGA: {pga}, PGV: {pgv}, Test No: {test_no}, Namespace: {namespace}")
+
+        if self.timer is not None:
+            self.timer.cancel()
+            self.timer = None
 
         # Save the trajectory to a numpy file
         if self.trajectory:

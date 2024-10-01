@@ -57,9 +57,9 @@ class ControlNode(Node):
         ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
 
         # Construct the paths relative to the workspace
-        excel_file_path = os.path.join(ros2_ws, 'virtual_shake_robot_pybullet', 'data', 'ASU_Shared_Scans', 'Shake_Table_Response', 'Earthquake_Records_Info.xlsx')
-        folder_path = os.path.join(ros2_ws, 'virtual_shake_robot_pybullet', 'data', 'ASU_Shared_Scans', 'Shake_Table_Response')
-        pickle_file_path = os.path.join(ros2_ws, 'virtual_shake_robot_pybullet', 'data', 'ASU_Shared_Scans', 'combined_data.pkl')
+        excel_file_path = os.path.join(ros2_ws, 'src','virtual_shake_robot_pybullet', 'data', 'Shake_Table_Response', 'Earthquake_Records_Info.xlsx')
+        folder_path = os.path.join(ros2_ws, 'src','virtual_shake_robot_pybullet', 'data', 'Shake_Table_Response')
+        pickle_file_path = os.path.join(ros2_ws,'src','virtual_shake_robot_pybullet', 'data', 'combined_data.pkl')
 
         # Optionally print the paths for debugging
         self.get_logger().info(f"Excel file path: {excel_file_path}")
@@ -91,6 +91,7 @@ class ControlNode(Node):
         self.amplitude_list = []
         self.frequency_list = []
         self.current_index = 0
+        self.rock_id = 2
 
         self.pedestal_reset_time = self.declare_parameter('simulation_node.engineSettings.pedestal_reset_time', 1.0).value
 
@@ -146,6 +147,7 @@ class ControlNode(Node):
             displacement_goal = LoadDispl.Goal()
             displacement_goal.positions = positions
             displacement_goal.timestamps = timestamps
+            displacement_goal.test_no = test_no
 
             self._displacement_action_client.wait_for_server()
             send_goal_future = self._displacement_action_client.send_goal_async(displacement_goal)
@@ -156,6 +158,7 @@ class ControlNode(Node):
             goal_handle = send_goal_future.result()
 
             if not goal_handle.accepted:
+                del send_goal_future, goal_handle
                 self.get_logger().error('Goal rejected by trajectory action server.')
                 return False
 
@@ -168,9 +171,11 @@ class ControlNode(Node):
             # Check the success attribute inside the result object
             if result.result.success:
                 self.get_logger().info('Displacement action succeeded.')
+                del send_goal_future, goal_handle, get_result_future, result
                 return True
             else:
                 self.get_logger().error('Displacement action failed.')
+                del send_goal_future, goal_handle, get_result_future, result
                 return False
         else:
             self.get_logger().error(f"Test data for Test No: {test_no} not found!")
@@ -188,7 +193,7 @@ class ControlNode(Node):
         """
         self.latest_pose = msg.pose
         self.new_pose_received = True
-        self.get_logger().info(f"Pose received: {self.latest_pose}")
+        # self.get_logger().info(f"Pose received: {self.latest_pose}")
 
     def sample_motion_param(self):
         """
@@ -217,7 +222,7 @@ class ControlNode(Node):
             None
         """
         self.spawn_initial_model()
-        for test_no in range(600, 605):  # Test numbers from 011 to 705
+        for test_no in range(650, 660):  # Test numbers from 011 to 705
             self.get_logger().info(f"Starting experiment on Test No: {test_no}")
 
             # Extract PGV, PGA, and PGV/PGA for the current test
@@ -227,7 +232,7 @@ class ControlNode(Node):
                 pga = test_data['Scaled PGA']
 
                 # Start recording with the extracted values, including the test_no
-                self.send_recording_goal('start', pga, pgv_to_pga, test_no)
+                # self.send_recording_goal('start', pga, pgv_to_pga, test_no)
                 self.get_logger().info(f"Started recording for Test No: {test_no} with PGA: {pga}, PGV/PGA: {pgv_to_pga}, and Test No: {test_no}")
             else:
                 self.get_logger().error(f"No data available for Test No: {test_no}. Skipping this test.")
@@ -258,13 +263,14 @@ class ControlNode(Node):
             else:
                 self.get_logger().error(f"Experiment on Test No: {test_no} failed or was not completed.")
 
-            self.send_recording_goal('stop', pga, pgv_to_pga, test_no)
+            # self.send_recording_goal('stop', pga, pgv_to_pga, test_no)
             self.get_logger().info(f"Stopped recording for Test No: {test_no}.")
 
             self.get_logger().info(f"Completed Test No: {test_no}. Moving to the next test.")
             
             # Delete and respawn the model for the next test
-            self.delete_and_spawn_model()
+            self.reset_model_postion_and_orientation()
+
 
             # Reset the trajectory before the next test
             self.reset_trajectory()
@@ -326,6 +332,7 @@ class ControlNode(Node):
         # Refresh the plot
         plt.draw()
         plt.pause(0.05)
+        plt.close()
         self.get_logger().info("PGV vs PGA plot updated.")
 
     def run_grid_cosine_experiment(self):
@@ -370,11 +377,26 @@ class ControlNode(Node):
 
             self.get_logger().info(f"Breaking here")
 
-            self.delete_and_spawn_model()
+            self.reset_model_postion_and_orientation()
             self.reset_trajectory()
 
         self.get_logger().info(f"Completed all {len(FA_data)} experiments")
         self.send_recording_goal('stop', A, F)
+
+    def reset_model_postion_and_orientation(self):
+
+        self.get_logger().info(f"Sending reset request to the simulation node")
+
+        reset_request = ManageModel.Request()
+        reset_request.action = "reset"
+
+        reset_future = self._manage_model_client.call_async(reset_request)
+        rclpy.spin_until_future_complete(self, reset_future)
+
+        if reset_future.result().success:
+            self.get_logger().info("Model reset successfully")
+        else:
+            self.get_logger().info(f"Failed to reset, {reset_future.result().message}")
 
     def spawn_initial_model(self):
         """Spawns the initial model in the simulation using the manage_model service."""
@@ -391,6 +413,9 @@ class ControlNode(Node):
             self.get_logger().info("Initial model spawned successfully.")
         else:
             self.get_logger().error(f"Failed to spawn initial model: {future.result().message}")
+        
+    
+
 
     def run_single_cosine_experiment(self, goal_handle):
         """
@@ -574,7 +599,7 @@ class ControlNode(Node):
         r, p, y = euler.quat2euler(q)
         return (abs(r) + abs(p)) >= 0.1
 
-    def log_Data(self, A, F, state):
+    def logData(self, A, F, state):
         """
         Logs the data for the current amplitude and frequency, updating the PGV vs PGA plot.
 
@@ -591,36 +616,32 @@ class ControlNode(Node):
         PGV_2_PGA = PGV / PGA
         PGA_g = PGA / 9.807
 
-        # Publish PGA and PGV values
-        self.pga_publisher.publish(Float64(data=PGA))
-        self.pgv_publisher.publish(Float64(data=PGV))
+        if not plt.get_fignums():  # Create the figure once if it doesn't exist
+            plt.figure(figsize=(10, 5))
+            plt.xlabel('PGA_g')
+            plt.ylabel('PGV / PGA')
+            plt.title('Toppling Status')
+            plt.grid(True)
+            plt.xlim(0, 0.6)  # Example fixed limits, adjust as necessary
+            plt.ylim(0, 0.6)
 
-        legend_labels = [text.get_text() for text in plt.gca().get_legend().get_texts()] if plt.gca().get_legend() else []
+        legend = plt.gca().get_legend()
+        legend_texts = [text.get_text() for text in legend.get_texts()] if legend else []
 
         if state:
-            if 'Toppled' not in legend_labels:
-                plt.scatter(PGA_g, PGV_2_PGA, c='r', label='Toppled')
-            else:
-                plt.scatter(PGA_g, PGV_2_PGA, c='r')
+            # Toppled
+            plt.scatter(PGA_g, PGV_2_PGA, c='r', label='Toppled' if 'Toppled' not in legend_texts else "")
             self.toppling_data.append((PGA_g, PGV_2_PGA, 1))
         else:
-            if 'Not Toppled' not in legend_labels:
-                plt.scatter(PGA_g, PGV_2_PGA, c='b', marker="v", label='Not Toppled')
-            else:
-                plt.scatter(PGA_g, PGV_2_PGA, c='b', marker="v")
+            plt.scatter(PGA_g, PGV_2_PGA, c='b', marker="v", label='Not Toppled' if 'Not Toppled' not in legend_texts else "")
             self.toppling_data.append((PGA_g, PGV_2_PGA, 0))
 
-        plt.xlabel('PGA_g')
-        plt.ylabel('PGV / PGA')
-        plt.title('Toppling Status')
+        if not legend:  # Only add the legend once
+            plt.legend(loc='upper right')
 
-        # Set fixed axis limits
-        plt.xlim(0, 0.6)  # Set the x-axis limit
-        plt.ylim(0, 0.6)  # Set the y-axis limit
-
-        plt.legend(loc='upper right')
-        plt.grid(True)
+        # Refresh the plot with a short pause to allow for dynamic updates
         plt.pause(0.05)
+        plt.close()
 
     def get_Range(self, As, Fs):
         """
@@ -674,6 +695,7 @@ class ControlNode(Node):
             filename = os.path.join(graphs_dir, f"Trajectory_A{self.amplitude}_F{self.frequency}.png")
             plt.savefig(filename)
             plt.show()
+            plt.close()
         else:
             self.get_logger().info("Plotting is disabled.")
 
@@ -689,12 +711,12 @@ class ControlNode(Node):
         Returns:
             None
         """
-        self.trajectory_goal = TrajectoryAction.Goal()
-        self.trajectory_goal.robot_id = self.robot_id
-        self.trajectory_goal.position_list = positions
-        self.trajectory_goal.velocity_list = velocities
-        self.trajectory_goal.timestamp_list = timestamps
-        self.trajectory_goal.response_wait_time = self.response_wait_time
+        trajectory_goal = TrajectoryAction.Goal()
+        trajectory_goal.robot_id = self.robot_id
+        trajectory_goal.position_list = positions
+        trajectory_goal.velocity_list = velocities
+        trajectory_goal.timestamp_list = timestamps
+        trajectory_goal.response_wait_time = self.response_wait_time
 
         self.get_logger().info("Sending trajectory goal with positions, velocities, and timestamps.")
         if not self._trajectory_action_client.wait_for_server(timeout_sec=10.0):
@@ -702,7 +724,7 @@ class ControlNode(Node):
             return
 
         self.get_logger().info("Trajectory action server is available, sending goal.")
-        send_goal_future = self._trajectory_action_client.send_goal_async(self.trajectory_goal)
+        send_goal_future = self._trajectory_action_client.send_goal_async(trajectory_goal)
         send_goal_future.add_done_callback(self.goal_response_callback)
 
     def goal_response_callback(self, future):
@@ -715,13 +737,13 @@ class ControlNode(Node):
         Returns:
             None
         """
-        self.goal_handle = future.result()  # Store the goal handle
-        if not self.goal_handle.accepted:
+        goal_handle = future.result()  # Store the goal handle
+        if not goal_handle.accepted:
             self.get_logger().error('Goal rejected by trajectory action server.')
         else:
             self.get_logger().info('Goal accepted by trajectory action server.')
 
-            get_result_future = self.goal_handle.get_result_async()
+            get_result_future = goal_handle.get_result_async()
             get_result_future.add_done_callback(self.final_result_callback)
 
     def final_result_callback(self, future):
@@ -816,6 +838,7 @@ class ControlNode(Node):
                 filename = os.path.join(graphs_dir, f"Trajectory_A{self.amplitude}_F{self.frequency}.png")
                 plt.savefig(filename)
                 plt.show()
+                plt.close()
             else:
                 self.get_logger().error("Lengths of timestamps, positions, and velocities do not match. Cannot plot trajectories.")
 

@@ -9,11 +9,11 @@ def generate_yaml_files(output_dir, base_content, parameter_combinations, model_
     
     # Update the mesh path based on the model choice
     if model_choice == 'sp1':
-        mesh_path = os.path.join(ros2_ws, 'virtual_shake_robot_pybullet/models/SP1_PBRmodel/sp1.urdf')
+        mesh_path = os.path.join(ros2_ws, 'src','virtual_shake_robot_pybullet/models/SP1_PBRmodel/sp1.urdf')
     elif model_choice == 'sp2':
-        mesh_path = os.path.join(ros2_ws, 'virtual_shake_robot_pybullet/models/SP2_PBRmodel/sp2.urdf')
-    else:  # default to pbr_mesh
-        mesh_path = os.path.join(ros2_ws, 'virtual_shake_robot_pybullet/models/double_rock_pbr/pbr_mesh.urdf')
+        mesh_path = os.path.join(ros2_ws, 'src','virtual_shake_robot_pybullet/models/SP2_PBRmodel/sp2.urdf')
+    else:  # default to pbr_mesh'
+        mesh_path = os.path.join(ros2_ws, 'src','virtual_shake_robot_pybullet/models/double_rock_pbr/pbr_mesh.urdf')
 
     yaml_files = []
 
@@ -41,8 +41,8 @@ def generate_yaml_files(output_dir, base_content, parameter_combinations, model_
 
 def generate_launch_files(output_dir, yaml_files, model_choice):
     ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
-    config_directory = os.path.join(ros2_ws, 'virtual_shake_robot_pybullet/config')
-    launch_directory = os.path.join(ros2_ws, 'virtual_shake_robot_pybullet/launch')
+    config_directory = os.path.join('{{ROS2_WS}}', 'src','virtual_shake_robot_pybullet/config')  # Placeholder for ROS2_WS
+    launch_directory = os.path.join('{{ROS2_WS}}', 'src','virtual_shake_robot_pybullet/launch')  # Placeholder for ROS2_WS
 
     launch_file_paths = []
 
@@ -119,8 +119,11 @@ def generate_launch_description():
     ])
         """
 
+        # Replace placeholder with the correct ROS2_WS directory
+        launch_content = launch_content.replace('{{ROS2_WS}}', ros2_ws)
+
         # Naming each launch file sequentially
-        launch_filename = os.path.join(launch_directory, f'{model_choice}_{i}.launch.py')
+        launch_filename = os.path.join(output_dir, f'{model_choice}_{i}.launch.py')
         with open(launch_filename, 'w') as file:
             file.write(launch_content)
         launch_file_paths.append(launch_filename)
@@ -162,14 +165,14 @@ def main():
             'ros__parameters': {
                 'rock_structure_mesh': {
                     'meshScale': [1.0, 1.0, 1.0],
-                    'mass': 0.105,
+                    'mass': 353.8022,
                     'restitution': 0.3,
                     'lateralFriction': 0.3,
                     'spinningFriction': 0.3,
                     'rollingFriction': 0.3,
                     'contactDamping': 1.0,
                     'contactStiffness': 100000.0,
-                    'rock_position': [0.0, 0.0, 3.3]
+                    'rock_position': [0.0, 0.0, 2.80]
                 }
             }
         }
@@ -182,8 +185,8 @@ def main():
     lateral_friction_range = [0.3, 0.5]
     spinning_friction_range = [0.3, 0.5]
     rolling_friction_range = [0.3, 0.5]
-    contact_damping_range = [1.0, 2.0]
-    contact_stiffness_range = [100000.0, 200000.0]
+    contact_damping_range = [100000.0, 200000.0]
+    contact_stiffness_range = [1000000.0, 2000000.0]
 
     # Generate all combinations of the parameters
     parameter_combinations = [
@@ -191,16 +194,12 @@ def main():
         for r, lf, sf, rf, cd, cs in itertools.product(restitution_range, lateral_friction_range, spinning_friction_range, rolling_friction_range, contact_damping_range, contact_stiffness_range)
     ]
 
-    print("Generated parameter combinations:")
-    for params in parameter_combinations:
-        print(params)
-
-    output_directory = os.path.join(os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws')), 'virtual_shake_robot_pybullet/config')
+    output_directory = os.path.join(os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws')),'src', 'virtual_shake_robot_pybullet/config')
     yaml_files = generate_yaml_files(output_directory, base_yaml_content, parameter_combinations, model_choice)
 
-    launch_files = generate_launch_files(os.path.join(os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws')), 'virtual_shake_robot_pybullet/launch'), yaml_files, model_choice)
+    launch_files = generate_launch_files(os.path.join(os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws')), 'src','virtual_shake_robot_pybullet/launch'), yaml_files, model_choice)
 
-    generate_master_launch_file(launch_files, os.path.join(os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws')), 'virtual_shake_robot_pybullet/launch'), model_choice)
+    generate_master_launch_file(launch_files, os.path.join(os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws')), 'src','virtual_shake_robot_pybullet/launch'), model_choice)
 
 if __name__ == "__main__":
     main()

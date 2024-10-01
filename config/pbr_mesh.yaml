@@ -1,7 +1,7 @@
 /**:
   ros__parameters:
     rock_structure_mesh:
-      mesh: '{{ROS2_WS}}/virtual_shake_robot_pybullet/models/double_rock_pbr/pbr_mesh.urdf'
+      mesh: '{{ROS2_WS}}/src/virtual_shake_robot_pybullet/models/double_rock_pbr/pbr_mesh.urdf'
       meshScale: [1.0, 1.0, 1.0]
       mass: 1437.596
       restitution: 0.3
