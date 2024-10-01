@@ -57,9 +57,9 @@ class ControlNode(Node):
         ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
 
         # Construct the paths relative to the workspace
-        excel_file_path = os.path.join(ros2_ws, 'src','virtual_shake_robot_pybullet', 'data', 'ASU_Shared_Scans', 'Shake_Table_Response', 'Earthquake_Records_Info.xlsx')
-        folder_path = os.path.join(ros2_ws, 'src','virtual_shake_robot_pybullet', 'data', 'ASU_Shared_Scans', 'Shake_Table_Response')
-        pickle_file_path = os.path.join(ros2_ws,'src','virtual_shake_robot_pybullet', 'data', 'ASU_Shared_Scans', 'combined_data.pkl')
+        excel_file_path = os.path.join(ros2_ws, 'src','virtual_shake_robot_pybullet', 'data', 'Shake_Table_Response', 'Earthquake_Records_Info.xlsx')
+        folder_path = os.path.join(ros2_ws, 'src','virtual_shake_robot_pybullet', 'data', 'Shake_Table_Response')
+        pickle_file_path = os.path.join(ros2_ws,'src','virtual_shake_robot_pybullet', 'data', 'combined_data.pkl')
 
         # Optionally print the paths for debugging
         self.get_logger().info(f"Excel file path: {excel_file_path}")
