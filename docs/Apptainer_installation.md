@@ -1,45 +1,40 @@
-# Running Parallel Simulations on a Server (Manual Setup)
+# Running Parallel Simulations on a Server
 
-If you need to run the parallel simulations on a server with more computational power, you can manually set up the environment using a base ROS2 Docker image or build your own Dockerfile. Here's a step-by-step guide:
+If you need to run the parallel simulations on a server with more computational power, you can set up the environment using a base ROS2 Docker image or build your own Dockerfile. 
 
-## 1. Using a Pre-Built ROS2 Docker Image
+## Manual Setup
 
-Start by pulling a base ROS2 Docker image that includes the ROS2 Humble release:
+1. Start by pulling a base ROS2 Docker image that includes the ROS2 Humble release:
 ```bash
 docker pull osrf/ros:humble-desktop
 ```
-Manual Setup:
+2. Once you have the image, you will need to install the following dependencies manually:
 
-Once you have the image, you will need to install the following dependencies manually:
-
-    pip (for Python package management)
-    pybullet
-    Any other dependencies required by your project.
+- pip (for Python package management)
+- pybullet
+- Any other dependencies required by your project.
 
 
-start the docker container :
+3. Start the docker container :
 
 ```
 docker run -it --name vsr_ros2_simulation osrf/ros:humble-desktop
 ```
 
-This will start the container with the dependencies.
-
-So now follow the README.md for the vsr setup
-
+## Convert from docker container
 
 Apptainer (formerly Singularity): Apptainer is more suited for shared server environments where you might not have root or sudo access, as it runs containers in a user space.
 
-- Convert the docker image to an Apptainer Image
+1. Make sure that you have installed the docker container following [docs/docker_installation.md](docker_installation.md).
+
+2. Convert the docker image to an Apptainer Image
 
 ```
 apptainer build vsr_simulation.sif docker://vsr_simulation
 
 ```
- - Run the container
+3. Run the container
 
 ```
 apptainer run vsr_simulation.sif
 ```
-
-Follow Similar steps as the docker container

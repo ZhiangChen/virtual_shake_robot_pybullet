@@ -2,7 +2,7 @@
 
 
 
-This project implements a robotics simulation framework using PyBullet and ROS2. The architecture is divided into three main nodes: Control, Perception, and Simulation, each with specific responsibilities. Additionally, it uses various configuration files to manage simulation parameters and robot specifications.
+This project implements a robotics simulation framework using PyBullet and ROS2. The architecture is divided into three main nodes: Control and Simulation, each with specific responsibilities. Additionally, it uses various configuration files to manage simulation parameters and robot specifications.
 
 ## Control Node
 
@@ -11,11 +11,6 @@ This project implements a robotics simulation framework using PyBullet and ROS2.
 - Calculates and generates the desired trajectory for the simulation.
 - Employs action servers to manage long-running processes, including trajectory planning and simulation task execution.
 
-## Perception Node
-
-- Listens for and subscribes to data topics published by the Simulation Node, focusing on the dynamic state of the simulation environment.
-- Processes and analyzes simulation state data, potentially enhancing and republishing this information for use in detailed analysis or advanced visualization.
-- Records experimental data, such as the status of Precariously Balanced Rock (PBR) and the trajectory followed during the simulation.
 
 ## Simulation Node
 
@@ -24,6 +19,7 @@ This project implements a robotics simulation framework using PyBullet and ROS2.
 - Implements a PID controller to accurately follow the specified trajectory.
 - Sends low-level control signals to the PyBullet server to guide the simulation process.
 - Supports instantiation of multiple PyBullet clients in parallel for efficient execution of concurrent simulations.
+- Records experimental data, such as the status of Precariously Balanced Rock (PBR) and the trajectory followed during the simulation.
 
 ## Launch File
 

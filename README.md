@@ -13,22 +13,19 @@ We use PyBullet as the physics engine. Please checkout the [PyBullet Quickstart 
 - Python (3.6 or newer)
 - pip (Python package installer)
 
-1. Update pip
+Install PyBullet:
 ```
 pip install --upgrade pip
-```
-2. Install PyBullet
-```
 pip install pybullet
 ```
-3.  Verify the Installation
+Verify the Installation:
 ```
 import pybullet as p
 print(pb.__version__)
 ```
 
 #### ROS2
-we develop VSR 2.0 based ROS2. Detailed info on the integration and the structure can be found on [docs/VSR2_structure.md](docs/VSR2_structure.md).
+We develop VSR 2.0 based ROS2. Detailed info on the integration and the structure can be found on [docs/VSR2_structure.md](docs/VSR2_structure.md).
 
 Please follow the instruction to install ROS2 and create a ROS2 workspace `~\ros2_ws\src`: https://docs.ros.org/en/humble/Installation.html
 
@@ -42,7 +39,7 @@ https://github.com/ZhiangChen/virtual_shake_robot_pybullet.git
 ```
 Build the Package: 
 ```
-cd ~/ros2_ws/src
+cd ~/ros2_ws
 colcon build --packages-select virtual_shake_robot_pybullet
 ```
 
@@ -52,12 +49,11 @@ source ~/ros2_ws/install/setup.bash
 ```
  
 ### Option 2. Docker Installation
-Docker provides an isolated environment to run the Virtual Shake Robot (VSR) without worrying about system dependencies. This option is suitable if you want a fully controlled, reproducible setup. Below are the steps to set up the VSR package using Docker.
-Docker installation and setup guide [Docker_Installtion](docs/docker_installation.md)
+Docker provides an isolated environment to run the VSR 2.0 without worrying about system dependencies. We have the steps to set up the VSR package using Docker in a tutorial, [Docker_Installtion](docs/docker_installation.md).
 
 
 ### Option 3. Apptainer Installation (for HPC)
-If you need to run the parallel simulations on HPC with more computational power, you can manually set up the environment using Apptainer, [VSR2_Apptainer_installation](docs/Apptainer_installation.md). 
+If you need to run the parallel simulations on HPC with more computational power, you can set up the environment using Apptainer, [VSR2_Apptainer_installation](docs/Apptainer_installation.md). 
 
 
 ## Basic Usage
@@ -73,7 +69,7 @@ ros2 launch virtual_shake_robot_pybullet box_launch.py
 
 To configure the box pedestal, you can modify the yaml file, `config/vsr_structure_box.yaml`.
 
-2. Mesh pedestal:
+2. Mesh pedestal (in development):
 ```
 ros2 launch virtual_shake_robot_pybullet mesh_launch.py
 ```

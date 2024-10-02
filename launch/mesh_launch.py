@@ -16,7 +16,7 @@ def generate_launch_description():
     # Define paths to the configuration files with placeholders
     physics_engine_parameters_path = os.path.join(config_directory, 'physics_engine_parameters.yaml')
     physics_parameters_path = os.path.join(config_directory, 'physics_parameters.yaml')
-    vsr_structure_path = os.path.join(config_directory, 'vsr_structure.yaml')
+    vsr_structure_path = os.path.join(config_directory, 'vsr_structure_mesh.yaml')
     pbr_structure_path = os.path.join(config_directory, 'pbr_physics.yaml')
 
     # Function to replace placeholders in the YAML files
@@ -48,7 +48,7 @@ def generate_launch_description():
     # Write the modified YAML contents to temporary files
     physics_engine_parameters_temp_path = write_temp_yaml(physics_engine_parameters_content, 'physics_engine_parameters.yaml')
     physics_parameters_temp_path = write_temp_yaml(physics_parameters_content, 'physics_parameters.yaml')
-    vsr_structure_temp_path = write_temp_yaml(vsr_structure_content, 'vsr_structure.yaml')
+    vsr_structure_temp_path = write_temp_yaml(vsr_structure_content, 'vsr_structure_mesh.yaml')
     pbr_structure_temp_path = write_temp_yaml(pbr_structure_content, 'pbr_physics.yaml')
 
     # Define the simulation node with updated parameter paths
