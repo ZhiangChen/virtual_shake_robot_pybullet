@@ -46,3 +46,8 @@ sudo apt install python3-colcon-common-extensions
 ros2 --version
 
 ```
+
+## 7. Create a ROS2 workshpace
+```
+mkdir -p ~/ros2_ws
+```
