@@ -352,7 +352,7 @@ class ControlNode(Node):
             self.get_logger().info(f'Starting experiment {idx + 1}/{len(FA_data)} with Amplitude: {self.amplitude}, Frequency: {self.frequency}')
 
             self.new_pose_received = False  # Reset the flag before sending the trajectory goal
-            self.send_recording_goal('start', A, F)
+            # self.send_recording_goal('start', A, F)
             self.calculate_and_send_trajectory()
 
             self.get_logger().info(f'Waiting for {self.response_wait_time} seconds for trajectory to complete.')
@@ -367,7 +367,7 @@ class ControlNode(Node):
             if self.latest_pose:
                 self.get_logger().info(f"Checking pose for experiment {idx + 1}: {self.latest_pose}")
                 toppled = self.check_Toppled(self.latest_pose)
-                self.log_Data(A, F, toppled)
+                self.logData(A, F, toppled)
                 if toppled:
                     self.get_logger().info("The Rock has toppled")
                 else:
@@ -381,7 +381,7 @@ class ControlNode(Node):
             self.reset_trajectory()
 
         self.get_logger().info(f"Completed all {len(FA_data)} experiments")
-        self.send_recording_goal('stop', A, F)
+        # self.send_recording_goal('stop', A, F)
 
     def reset_model_postion_and_orientation(self):
 

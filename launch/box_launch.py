@@ -14,6 +14,7 @@ def set_test_no_if_provided(context, *args, **kwargs):
             package='virtual_shake_robot_pybullet',
             executable='control_node.py',
             name='control_node',
+            namespace='sim_1',
             output='screen',
             parameters=[
                 {'motion_mode': LaunchConfiguration('motion_mode')},
@@ -25,10 +26,8 @@ def set_test_no_if_provided(context, *args, **kwargs):
             package='virtual_shake_robot_pybullet',
             executable='control_node.py',
             name='control_node',
+            namespace='sim_1',
             output='screen',
-            parameters=[
-                {'motion_mode': LaunchConfiguration('motion_mode')}
-            ]
         )]
 
 def generate_launch_description():
@@ -103,6 +102,7 @@ def generate_launch_description():
         package='virtual_shake_robot_pybullet',
         executable='simulation_node.py',
         name='simulation_node',
+        namespace='sim_1',
         output='screen',
         parameters=[
             physics_engine_parameters_temp_path,
@@ -110,7 +110,6 @@ def generate_launch_description():
             vsr_structure_temp_path,
             pbr_structure_temp_path,
             pbr_mesh_temp_path,
-            {'urdf_file': urdf_file_path_content},
             {'realtime_flag': True}
         ]
     )
@@ -118,6 +117,5 @@ def generate_launch_description():
     return LaunchDescription([
         motion_mode_arg,
         test_no_arg,
-        simulation_node,
-        OpaqueFunction(function=set_test_no_if_provided)  
+        simulation_node
     ])
