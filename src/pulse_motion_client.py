@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 class AFActionClient(Node):
     def __init__(self):
         super().__init__('af_action_client')
-        self._action_client = ActionClient(self, AF, 'set_amplitude_frequency_manual')
+        self._action_client = ActionClient(self, AF, '/sim_1/set_amplitude_frequency_manual')
 
     def send_goal(self, amplitude, frequency):
         goal_msg = AF.Goal()

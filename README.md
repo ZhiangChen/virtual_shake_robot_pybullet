@@ -30,7 +30,7 @@ print(pb.__version__)
 #### ROS2
 we develop VSR 2.0 based ROS2. Detailed info on the integration and the structure can be found on [docs/VSR2_structure.md](docs/VSR2_structure.md).
 
-Please follow the instruction to install ROS2 and create a ROS2 workspace `~\ros2_ws`: https://docs.ros.org/en/foxy/Installation.html
+Please follow the instruction to install ROS2 and create a ROS2 workspace `~\ros2_ws\src`: https://docs.ros.org/en/humble/Installation.html
 
 This repository should not have compatability issues with many ROS2 versions. We have developed the package based on ROS2 Humble. Here is the installation guide for our setup [ROS2_humble_installation](docs/ROS_installation.md)
 
@@ -52,6 +52,8 @@ source ~/ros2_ws/install/setup.bash
 ```
  
 ### Option 2. Docker Installation
+Docker provides an isolated environment to run the Virtual Shake Robot (VSR) without worrying about system dependencies. This option is suitable if you want a fully controlled, reproducible setup. Below are the steps to set up the VSR package using Docker.
+Docker installation and setup guide [Docker_Installtion](docs/docker_installation.md)
 
 
 ### Option 3. Apptainer Installation (for HPC)

@@ -61,27 +61,41 @@ class SimulationNode(Node):
 
         self.get_logger().info("Action server up and running!")
 
-        # Publishers for position and velocity data in the simulation thread
-        self.position_publisher = self.create_publisher(Float64, 'pedestal_position_publisher', 10)
-        self.velocity_publisher = self.create_publisher(Float64, 'pedestal_velocity_publisher', 10)
-
         # Desired state publisher
         self.desired_position_publisher = self.create_publisher(Float64, 'desired_position_topic', 10)
         self.desired_velocity_publisher = self.create_publisher(Float64, 'desired_velocity_topic', 10)
 
-
+        # Get the full namespace
         full_namespace = self.get_namespace()
-        sim_no = full_namespace.split('/')[1]
-        
-        self.get_logger().info(f"Using namespace: {full_namespace}, sim_no: {sim_no}")
-        
-        # Publishers
-        self.position_publisher = self.create_publisher(Float64, f'/{sim_no}/{sim_no}/pedestal_position_publisher', 10)
-        self.velocity_publisher = self.create_publisher(Float64, f'/{sim_no}/{sim_no}/pedestal_velocity_publisher', 10)
-        self.pbr_pose_publisher = self.create_publisher(PoseStamped, f'/{sim_no}/{sim_no}/pbr_pose_topic', 10)
 
+        # Check if namespace contains valid sim_no
+        if full_namespace and len(full_namespace.split('/')) > 1:
+            sim_no = full_namespace.split('/')[1]
+            if sim_no:  # Ensure sim_no is not empty
+                self.get_logger().info(f"Using namespace: {full_namespace}, sim_no: {sim_no}")
+                
+                # Publishers with sim_no
+                self.position_publisher = self.create_publisher(Float64, f'/{sim_no}/{sim_no}/pedestal_position_publisher', 10)
+                self.velocity_publisher = self.create_publisher(Float64, f'/{sim_no}/{sim_no}/pedestal_velocity_publisher', 10)
+                self.pbr_pose_publisher = self.create_publisher(PoseStamped, f'/{sim_no}/{sim_no}/pbr_pose_topic', 10)
+            else:
+                self.get_logger().info("sim_no is empty, running without namespace.")
+                # Publishers without sim_no (default names)
+                self.position_publisher = self.create_publisher(Float64, 'pedestal_position_publisher', 10)
+                self.velocity_publisher = self.create_publisher(Float64, 'pedestal_velocity_publisher', 10)
+                self.pbr_pose_publisher = self.create_publisher(PoseStamped, 'pbr_pose_topic', 10)
+        else:
+            self.get_logger().info("No sim_no mentioned, running without namespace.")
+            
+            # Publishers without sim_no (default names)
+            self.position_publisher = self.create_publisher(Float64, 'pedestal_position_publisher', 10)
+            self.velocity_publisher = self.create_publisher(Float64, 'pedestal_velocity_publisher', 10)
+            self.pbr_pose_publisher = self.create_publisher(PoseStamped, 'pbr_pose_topic', 10)
 
+        # Manage model service
         self._manage_model_service = self.create_service(ManageModel, 'manage_model', self.manage_model_callback)
+
+
 
         #adding a realtime_flag to control the time_sleep
         self.declare_parameter('realtime_flag', True)

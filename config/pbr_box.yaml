@@ -10,4 +10,4 @@
       contactDamping: 10000.0
       contactStiffness: 1000000.0
       localInertiaDiagonal: [5416.66, 4166.67, 2083.33]
-      rock_position: [0.0, 0.0, 4.5]
+      rock_position: [0.0, 0.0, 3.7]
