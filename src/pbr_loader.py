@@ -10,7 +10,7 @@ class LoadPBRClient(Node):
     def __init__(self, structure_type):
         super().__init__('load_pbr_client')
         self.structure_type = structure_type
-        self._action_client = ActionClient(self, LoadPBR, '/sim_1/load_pbr_action')
+        self._action_client = ActionClient(self, LoadPBR, 'load_pbr_action')
 
     def send_goal(self, structure_name):
         goal_msg = LoadPBR.Goal()
