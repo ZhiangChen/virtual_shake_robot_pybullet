@@ -116,8 +116,9 @@ class ControlNode(Node):
             self.run_single_recording_experiment(self.test_no)
         elif self.motion_mode == 'all_recordings':
             self.run_all_recording_experiments()
-        else:
-            self.get_logger().error(f"Unknown motion_mode: {self.motion_mode}. Please specify one of 'single_cosine', 'grid_cosine', 'single_recording', or 'all_recordings'.")
+        
+        self.declare_parameter('enable_plotting', False)
+        self.enable_plotting = self.get_parameter('enable_plotting').value
 
     def run_single_recording_experiment(self, test_no):
         """
@@ -222,7 +223,7 @@ class ControlNode(Node):
             None
         """
         self.spawn_initial_model()
-        for test_no in range(650, 660):  # Test numbers from 011 to 705
+        for test_no in range(700, 705):  # Test numbers from 011 to 705
             self.get_logger().info(f"Starting experiment on Test No: {test_no}")
 
             # Extract PGV, PGA, and PGV/PGA for the current test
@@ -367,7 +368,8 @@ class ControlNode(Node):
             if self.latest_pose:
                 self.get_logger().info(f"Checking pose for experiment {idx + 1}: {self.latest_pose}")
                 toppled = self.check_Toppled(self.latest_pose)
-                self.logData(A, F, toppled)
+                if self.enable_plotting:
+                    self.logData(A, F, toppled)
                 if toppled:
                     self.get_logger().info("The Rock has toppled")
                 else:

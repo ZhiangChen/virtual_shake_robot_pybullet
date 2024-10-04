@@ -326,6 +326,7 @@ class SimulationNode(Node):
                 rollingFriction = self.rock_structure_mesh_config['rollingFriction']
                 contactDamping = self.rock_structure_mesh_config['contactDamping']
                 contactStiffness = self.rock_structure_mesh_config['contactStiffness']
+               
 
 
                 p.changeDynamics(
@@ -561,6 +562,11 @@ class SimulationNode(Node):
                     physicsClientId=self.client_id
                 )
 
+                dynamics_info = p.getDynamicsInfo(rock_id, -1)
+
+                self.get_logger().info(f"The Dynamics info through spwan  is {dynamics_info}")
+
+
             else:
                 dimensions = self.rock_structure_box_config['dimensions']
                 mass = self.rock_structure_box_config['mass']
@@ -651,6 +657,30 @@ class SimulationNode(Node):
                 
                 rock_position = self.rock_structure_mesh_config['rock_position']
                 rock_id = p.loadURDF(urdf_path, rock_position, [0, 0, 0, 1], physicsClientId=self.client_id)
+
+                # mass = self.rock_structure_mesh_config['mass']
+                # restitution = self.rock_structure_mesh_config['restitution']
+                # lateralFriction = self.rock_structure_mesh_config['lateralFriction']
+                # spinningFriction = self.rock_structure_mesh_config['spinningFriction']
+                # rollingFriction = self.rock_structure_mesh_config['rollingFriction']
+                # contactDamping = self.rock_structure_mesh_config['contactDamping']
+                # contactStiffness = self.rock_structure_mesh_config['contactStiffness']
+                
+                # p.changeDynamics(
+                #     rock_id, -1,
+                #     mass=mass,
+                #     restitution=restitution,
+                #     lateralFriction=lateralFriction,
+                #     spinningFriction=spinningFriction,
+                #     rollingFriction=rollingFriction,
+                #     contactDamping=contactDamping,
+                #     contactStiffness=contactStiffness,
+                #     physicsClientId=self.client_id
+                # )
+                dynamics_info = p.getDynamicsInfo(rock_id, -1)
+
+                self.get_logger().info(f"The Dynamics info through callback is {dynamics_info}")
+
                
             elif structure_type == 'box':
                 # Retrieve parameters from parameter server
@@ -976,10 +1006,7 @@ class SimulationNode(Node):
 
             # Publish the PoseStamped message
             self.pbr_pose_publisher.publish(pose_msg)
-        else:
-            self.get_logger().error("rock_id is None, cannot get base position and orientation.")
-            goal_handle.abort()
-            return TrajectoryAction.Result(success=False)
+        
 
         self.get_logger().info("Trajectory execution completed successfully.")
         goal_handle.succeed()

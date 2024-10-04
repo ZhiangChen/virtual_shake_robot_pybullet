@@ -64,10 +64,6 @@ def main(args=None):
     
     action_client = AFActionClient()
     
-    # Generate and log the A and F values
-    FA_data = action_client.sampleMotionParam()
-    for F, A in FA_data:
-        action_client.get_logger().info(f'Generated Frequency: {F}, Amplitude: {A}')
     
    
     # Send the command-line values as goals

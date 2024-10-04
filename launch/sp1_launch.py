@@ -18,7 +18,7 @@ def generate_launch_description():
     # Declare the test_no argument (but we will conditionally pass it later)
     test_no_arg = DeclareLaunchArgument(
         'test_no',
-        default_value='0',  # Set a default value
+        default_value='',  # Set a default value
         description='Test number for single_recording mode'
     )
 
