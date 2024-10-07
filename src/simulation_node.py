@@ -142,7 +142,6 @@ class SimulationNode(Node):
                 ('rock_structure_box.lateralFriction', rclpy.Parameter.Type.DOUBLE),
                 ('rock_structure_box.localInertiaDiagonal', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('rock_structure_box.spinningFriction', rclpy.Parameter.Type.DOUBLE),
-                ('rock_structure_box.rollingFriction', rclpy.Parameter.Type.DOUBLE),
                 ('rock_structure_box.contactDamping', rclpy.Parameter.Type.DOUBLE),
                 ('rock_structure_box.contactStiffness', rclpy.Parameter.Type.DOUBLE),
                 ('rock_structure_box.rock_position', rclpy.Parameter.Type.DOUBLE_ARRAY),
@@ -175,7 +174,6 @@ class SimulationNode(Node):
                 'restitution': self.get_parameter('dynamics.world_box.restitution').value,
                 'lateralFriction': self.get_parameter('dynamics.world_box.lateralFriction').value,
                 'spinningFriction': self.get_parameter('dynamics.world_box.spinningFriction').value,
-                'rollingFriction': self.get_parameter('dynamics.world_box.rollingFriction').value,
                 'contactDamping': self.get_parameter('dynamics.world_box.contactDamping').value,
                 'contactStiffness': self.get_parameter('dynamics.world_box.contactStiffness').value,
             },
@@ -183,7 +181,6 @@ class SimulationNode(Node):
                 'restitution': self.get_parameter('dynamics.pedestal.restitution').value,
                 'lateralFriction': self.get_parameter('dynamics.pedestal.lateralFriction').value,
                 'spinningFriction': self.get_parameter('dynamics.pedestal.spinningFriction').value,
-                'rollingFriction': self.get_parameter('dynamics.pedestal.rollingFriction').value,
                 'contactDamping': self.get_parameter('dynamics.pedestal.contactDamping').value,
                 'contactStiffness': self.get_parameter('dynamics.pedestal.contactStiffness').value,
             },
@@ -209,7 +206,6 @@ class SimulationNode(Node):
             'restitution': self.get_parameter('rock_structure_box.restitution').value,
             'lateralFriction': self.get_parameter('rock_structure_box.lateralFriction').value,
             'spinningFriction': self.get_parameter('rock_structure_box.spinningFriction').value,
-            'rollingFriction': self.get_parameter('rock_structure_box.rollingFriction').value,
             'contactDamping': self.get_parameter('rock_structure_box.contactDamping').value,
             'contactStiffness': self.get_parameter('rock_structure_box.contactStiffness').value,
             'localInertiaDiagonal': self.get_parameter('rock_structure_box.localInertiaDiagonal').value,
@@ -223,7 +219,6 @@ class SimulationNode(Node):
             'restitution': self.get_parameter('rock_structure_mesh.restitution').value,
             'lateralFriction': self.get_parameter('rock_structure_mesh.lateralFriction').value,
             'spinningFriction': self.get_parameter('rock_structure_mesh.spinningFriction').value,
-            'rollingFriction': self.get_parameter('rock_structure_mesh.rollingFriction').value,
             'contactDamping': self.get_parameter('rock_structure_mesh.contactDamping').value,
             'contactStiffness': self.get_parameter('rock_structure_mesh.contactStiffness').value,
             'rock_position' : self.get_parameter('rock_structure_mesh.rock_position').value
@@ -240,7 +235,7 @@ class SimulationNode(Node):
 
         self.setup_simulation()
         self.create_robot()
-        # self.spawn_pbr_on_pedestal()
+        
 
     def server_connection(self, use_gui=True):
         """
@@ -306,6 +301,7 @@ class SimulationNode(Node):
         time_step = self.engine_settings['timestep']
 
         if request.action == "spawn":
+
             urdf_path = self.rock_structure_mesh_config['mesh']
             rock_position = self.rock_structure_mesh_config['rock_position']  
             model_id = p.loadURDF(urdf_path, basePosition=rock_position, physicsClientId=self.client_id)
@@ -319,11 +315,9 @@ class SimulationNode(Node):
                 response.message = f"Rock model loaded with ID: {self.rock_id}"
                 self.get_logger().info(response.message)  # Log the success message
 
-                mass = self.rock_structure_mesh_config['mass']
                 restitution = self.rock_structure_mesh_config['restitution']
                 lateralFriction = self.rock_structure_mesh_config['lateralFriction']
                 spinningFriction = self.rock_structure_mesh_config['spinningFriction']
-                rollingFriction = self.rock_structure_mesh_config['rollingFriction']
                 contactDamping = self.rock_structure_mesh_config['contactDamping']
                 contactStiffness = self.rock_structure_mesh_config['contactStiffness']
                
@@ -331,11 +325,9 @@ class SimulationNode(Node):
 
                 p.changeDynamics(
                     self.rock_id, -1,
-                    mass=mass,
                     restitution=restitution,
                     lateralFriction=lateralFriction,
                     spinningFriction=spinningFriction,
-                    rollingFriction=rollingFriction,
                     contactDamping=contactDamping,
                     contactStiffness=contactStiffness,
                     physicsClientId=self.client_id
@@ -350,7 +342,6 @@ class SimulationNode(Node):
                 self.get_logger().info(f"Mass: {dynamics_info[0]}")
                 self.get_logger().info(f"Lateral Friction: {dynamics_info[1]}")
                 self.get_logger().info(f"Restitution: {dynamics_info[5]}")
-                self.get_logger().info(f"Rolling Friction: {dynamics_info[6]}")
                 self.get_logger().info(f"Spinning Friction: {dynamics_info[7]}")
                 self.get_logger().info(f"Contact Damping: {dynamics_info[8]}")
                 self.get_logger().info(f"Contact Stiffness: {dynamics_info[9]}")
@@ -515,117 +506,6 @@ class SimulationNode(Node):
             return
 
 
-
-
-
-
-    def spawn_pbr_on_pedestal(self):
-        """
-        Spawns the Precariously Balanced Rock (PBR) on top of the pedestal and updates the pedestal's dynamics
-        based on the PBR's properties.
-        """
-        try:
-            if hasattr(self, 'rock_structure_mesh_config'):
-                urdf_path = self.rock_structure_mesh_config['mesh']
-                mesh_scale = self.rock_structure_mesh_config['meshScale']
-                mass = self.rock_structure_mesh_config['mass']
-                restitution = self.rock_structure_mesh_config['restitution']
-                lateralFriction = self.rock_structure_mesh_config['lateralFriction']
-                spinningFriction = self.rock_structure_mesh_config['spinningFriction']
-                rollingFriction = self.rock_structure_mesh_config['rollingFriction']
-                contactDamping = self.rock_structure_mesh_config['contactDamping']
-                contactStiffness = self.rock_structure_mesh_config['contactStiffness']
-
-                rock_position = self.rock_structure_mesh_config['rock_position']
-
-                self.get_logger().info(f"Spawning PBR model from {urdf_path} at position {rock_position}")
-
-                rock_id = p.loadURDF(urdf_path, rock_position, [0, 0, 0, 1], globalScaling=mesh_scale[0], physicsClientId=self.client_id)
-
-                if rock_id < 0:
-                    self.get_logger().error("Failed to load the PBR model.")
-                    return False
-
-                self.rock_id = rock_id
-                self.get_logger().info(f"PBR model loaded with ID: {self.rock_id}")
-
-                # Set the dynamics for the PBR
-                p.changeDynamics(
-                    self.rock_id, -1,
-                    mass=mass,
-                    restitution=restitution,
-                    lateralFriction=lateralFriction,
-                    spinningFriction=spinningFriction,
-                    rollingFriction=rollingFriction,
-                    contactDamping=contactDamping,
-                    contactStiffness=contactStiffness,
-                    physicsClientId=self.client_id
-                )
-
-                dynamics_info = p.getDynamicsInfo(rock_id, -1)
-
-                self.get_logger().info(f"The Dynamics info through spwan  is {dynamics_info}")
-
-
-            else:
-                dimensions = self.rock_structure_box_config['dimensions']
-                mass = self.rock_structure_box_config['mass']
-                restitution = self.rock_structure_box_config['restitution']
-                lateralFriction = self.rock_structure_box_config['lateralFriction']
-                spinningFriction = self.rock_structure_box_config['spinningFriction']
-                rollingFriction = self.rock_structure_box_config['rollingFriction']
-                contactDamping = self.rock_structure_box_config['contactDamping']
-                contactStiffness = self.rock_structure_box_config['contactStiffness']
-                localInertiaDiagonal = self.rock_structure_box_config['localInertiaDiagonal']
-
-                rock_position = self.rock_structure_box_config['rock_position']
-                collision_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[d / 2 for d in dimensions])
-                visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[d / 2 for d in dimensions], rgbaColor=[0.5, 0.5, 0.5, 1])
-
-                rock_id = p.createMultiBody(
-                    baseMass=mass,
-                    baseCollisionShapeIndex=collision_shape,
-                    baseVisualShapeIndex=visual_shape,
-                    basePosition=rock_position,
-                    baseOrientation=[0, 0, 0, 1],
-                    physicsClientId=self.client_id
-                )
-
-                # Set the dynamics for the PBR
-                p.changeDynamics(
-                    rock_id, -1,
-                    restitution=restitution,
-                    lateralFriction=lateralFriction,
-                    spinningFriction=spinningFriction,
-                    rollingFriction=rollingFriction,
-                    contactDamping=contactDamping,
-                    contactStiffness=contactStiffness,
-                    localInertiaDiagonal=localInertiaDiagonal,
-                    physicsClientId=self.client_id
-                )
-
-            # Apply the same dynamics to the pedestal as the PBR
-            p.changeDynamics(
-                self.robot_id, 0,  # Link index for the pedestal
-                contactDamping=contactDamping,
-                contactStiffness=contactStiffness,
-                physicsClientId=self.client_id
-            )
-
-            # Verify that the dynamics were set correctly
-            pedestal_dynamics_info = p.getDynamicsInfo(self.robot_id, 0, physicsClientId=self.client_id)
-            self.get_logger().info(f"Pedestal contactDamping: {pedestal_dynamics_info[8]}")
-            self.get_logger().info(f"Pedestal contactStiffness: {pedestal_dynamics_info[9]}")
-
-            return True
-
-        except Exception as e:
-            self.get_logger().error(f"Error spawning PBR: {str(e)}")
-            return False
-
-
-
-
     def load_pbr_callback(self, goal_handle):
         """
         Callback function for loading the PBR structure as part of the LoadPBR action.
@@ -650,33 +530,36 @@ class SimulationNode(Node):
         try:
             
             if structure_type == 'mesh':
-                
+
+
                 urdf_path = self.rock_structure_mesh_config['mesh']
 
                 self.get_logger().info(f"Loading rock mesh from {urdf_path}...")
                 
                 rock_position = self.rock_structure_mesh_config['rock_position']
                 rock_id = p.loadURDF(urdf_path, rock_position, [0, 0, 0, 1], physicsClientId=self.client_id)
-
-                # mass = self.rock_structure_mesh_config['mass']
-                # restitution = self.rock_structure_mesh_config['restitution']
-                # lateralFriction = self.rock_structure_mesh_config['lateralFriction']
-                # spinningFriction = self.rock_structure_mesh_config['spinningFriction']
-                # rollingFriction = self.rock_structure_mesh_config['rollingFriction']
-                # contactDamping = self.rock_structure_mesh_config['contactDamping']
-                # contactStiffness = self.rock_structure_mesh_config['contactStiffness']
                 
-                # p.changeDynamics(
-                #     rock_id, -1,
-                #     mass=mass,
-                #     restitution=restitution,
-                #     lateralFriction=lateralFriction,
-                #     spinningFriction=spinningFriction,
-                #     rollingFriction=rollingFriction,
-                #     contactDamping=contactDamping,
-                #     contactStiffness=contactStiffness,
-                #     physicsClientId=self.client_id
-                # )
+
+                dynamics_info = p.getDynamicsInfo(rock_id, -1)
+
+                self.get_logger().info(f"The Dynamics before is {dynamics_info}")
+
+                mass = self.rock_structure_mesh_config['mass']
+                restitution = self.rock_structure_mesh_config['restitution']
+                lateralFriction = self.rock_structure_mesh_config['lateralFriction']
+                spinningFriction = self.rock_structure_mesh_config['spinningFriction']
+                contactDamping = self.rock_structure_mesh_config['contactDamping']
+                contactStiffness = self.rock_structure_mesh_config['contactStiffness']
+                
+                p.changeDynamics(
+                    rock_id, -1,
+                    restitution=restitution,
+                    lateralFriction=lateralFriction,
+                    spinningFriction=spinningFriction,
+                    contactDamping=contactDamping,
+                    contactStiffness=contactStiffness,
+                    physicsClientId=self.client_id
+                )
                 dynamics_info = p.getDynamicsInfo(rock_id, -1)
 
                 self.get_logger().info(f"The Dynamics info through callback is {dynamics_info}")
@@ -689,7 +572,6 @@ class SimulationNode(Node):
                 rock_restitution = self.rock_structure_box_config['restitution']
                 rock_lateralFriction = self.rock_structure_box_config['lateralFriction']
                 rock_spinningFriction = self.rock_structure_box_config['spinningFriction']
-                rock_rollingFriction = self.rock_structure_box_config['rollingFriction']
                 rock_contactDamping = self.rock_structure_box_config['contactDamping']
                 rock_contactStiffness = self.rock_structure_box_config['contactStiffness']
                 principal_moments = self.rock_structure_box_config['localInertiaDiagonal']
@@ -715,7 +597,6 @@ class SimulationNode(Node):
                     restitution=rock_restitution,
                     lateralFriction=rock_lateralFriction,
                     spinningFriction=rock_spinningFriction,
-                    rollingFriction=rock_rollingFriction,
                     contactDamping=rock_contactDamping,
                     contactStiffness=rock_contactStiffness,
                     localInertiaDiagonal=principal_moments,  

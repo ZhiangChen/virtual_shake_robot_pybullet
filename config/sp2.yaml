@@ -1,13 +1,12 @@
 /**:
   ros__parameters:
     rock_structure_mesh:
-      mesh: "{{ROS2_WS}}/src/virtual_shake_robot_pybullet/models/SP2_PBRmodel/sp2.urdf"
+      mesh: "/src/virtual_shake_robot_pybullet/models/SP2_PBRmodel/sp2.urdf"
       meshScale: [1.0, 1.0, 1.0]
       mass: 353.802
       restitution: 0.3
       lateralFriction: 0.5
       spinningFriction: 0.3
-      rollingFriction: 0.3
       contactDamping: 1.0
       contactStiffness: 100000.0
       rock_position: [0.0, 0.0, 3.3]

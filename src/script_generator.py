@@ -169,7 +169,6 @@ def main():
                     'restitution': 0.3,
                     'lateralFriction': 0.3,
                     'spinningFriction': 0.3,
-                    'rollingFriction': 0.3,
                     'contactDamping': 1.0,
                     'contactStiffness': 100000.0,
                     'rock_position': [0.0, 0.0, 2.80]
@@ -184,14 +183,13 @@ def main():
     restitution_range = [0.3, 0.4, 0.5]
     lateral_friction_range = [0.3, 0.5]
     spinning_friction_range = [0.3, 0.5]
-    rolling_friction_range = [0.3, 0.5]
-    contact_damping_range = [100000.0, 200000.0]
+    contact_damping_range = [10000.0, 20000.0]
     contact_stiffness_range = [1000000.0, 2000000.0]
 
     # Generate all combinations of the parameters
     parameter_combinations = [
-        {'restitution': r, 'lateralFriction': lf, 'spinningFriction': sf, 'rollingFriction': rf, 'contactDamping': cd, 'contactStiffness': cs}
-        for r, lf, sf, rf, cd, cs in itertools.product(restitution_range, lateral_friction_range, spinning_friction_range, rolling_friction_range, contact_damping_range, contact_stiffness_range)
+        {'restitution': r, 'lateralFriction': lf, 'spinningFriction': sf, 'contactDamping': cd, 'contactStiffness': cs}
+        for r, lf, sf, cd, cs in itertools.product(restitution_range, lateral_friction_range, spinning_friction_range, contact_damping_range, contact_stiffness_range)
     ]
 
     output_directory = os.path.join(os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws')),'src', 'virtual_shake_robot_pybullet/config')
