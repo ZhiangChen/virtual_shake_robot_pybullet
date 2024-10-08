@@ -76,24 +76,8 @@ ros2 launch virtual_shake_robot_pybullet mesh_launch.py
 
 To configure the mesh pedestal, you can modify the yaml file, `config/vsr_structure_mesh.yaml`.
 
-Note: The physics parameters about the pedestal and world can be modified on `config/physics_parameters.yaml`, and the physics engine parameters about the simulation solvers can be modified on `config/physics_engine_parameters.yaml`. 
+Note: The physics parameters about the pedestal and world can be modified on `config/physics_parameters.yaml`, and the physics engine parameters about the simulation solvers can be modified on `config/physics_engine_parameters.yaml`.
 
-### Running the Control Node    
-
-The control node accepts amplitude (A) and frequency (F) values to simulate a single-pulse cosine displacement ground motion of the pedestal. To trigger the motion, run:
- 
-```
-ros2 run virtual_shake_robot_pybullet pulse_motion_client.py 2.0 1.0
-```
-
-In this case, the ground motion amplitude is 2.0 meters and the frequence is 1 Hz. The single-pulse cosine displacement motion is calculated using the following equations:
-```
-displacement: d = -A*cos(2*pi*F*t) + A
-velocity: v = 2*pi*A*F*sin(2*pi*F*t)
-acceleration: a = 4*pi^2*F^2*A*cos(2*pi*F*t)
-```
-
-For further details about the calculation, refer to the tutorial [inertia.md](docs/inertia.md).
 
 ### Spawning PBR on top of the pedestal 
 
@@ -117,6 +101,25 @@ With different arguments (`mesh` or `box`), the program loads a PBR from `config
 Note: Inertia is an important physics parameter for PBR dynamics simulation. For more details on calculating inertia, refer to [inertia.md](docs/inertia.md). 
 
 ![Pbr mesh file on pedestal](docs/pbr.png)
+
+### Running the Control Node    
+
+The control node accepts amplitude (A) and frequency (F) values to simulate a single-pulse cosine displacement ground motion of the pedestal. To trigger the motion, run:
+ 
+```
+ros2 run virtual_shake_robot_pybullet pulse_motion_client.py 2.0 1.0
+```
+
+In this case, the ground motion amplitude is 2.0 meters and the frequence is 1 Hz. The single-pulse cosine displacement motion is calculated using the following equations:
+```
+displacement: d = -A*cos(2*pi*F*t) + A
+velocity: v = 2*pi*A*F*sin(2*pi*F*t)
+acceleration: a = 4*pi^2*F^2*A*cos(2*pi*F*t)
+```
+
+For further details about the calculation, refer to the tutorial [inertia.md](docs/inertia.md).
+
+
 
 
 ### Running the Experiment in Different Modes

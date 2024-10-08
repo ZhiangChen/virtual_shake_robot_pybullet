@@ -79,6 +79,7 @@ class ControlNode(Node):
 
         self.get_logger().info("ControlNode initialized and action servers started.")
         self.robot_id = 1
+        self.rock_id = None
         self.current_position = 0.0
         self.current_velocity = 0.0
         self.timestamps = []
@@ -91,7 +92,6 @@ class ControlNode(Node):
         self.amplitude_list = []
         self.frequency_list = []
         self.current_index = 0
-        self.rock_id = 2
 
         self.pedestal_reset_time = self.declare_parameter('simulation_node.engineSettings.pedestal_reset_time', 1.0).value
 
@@ -116,8 +116,9 @@ class ControlNode(Node):
             self.run_single_recording_experiment(self.test_no)
         elif self.motion_mode == 'all_recordings':
             self.run_all_recording_experiments()
-        else:
-            self.get_logger().error(f"Unknown motion_mode: {self.motion_mode}. Please specify one of 'single_cosine', 'grid_cosine', 'single_recording', or 'all_recordings'.")
+        
+        # self.declare_parameter('enable_plotting', False)  
+        # self.enable_plotting = self.get_parameter('enable_plotting').value
 
     def run_single_recording_experiment(self, test_no):
         """
@@ -128,7 +129,11 @@ class ControlNode(Node):
 
         Returns:
             bool: True if the experiment succeeded, False otherwise.
+
         """
+
+        if self.rock_id is None:
+            self.spawn_initial_model()
         if test_no in self.combined_data:
             test_data = self.combined_data[test_no]
             self.get_logger().info(f"Data type of test_data: {type(test_data)}")
@@ -221,8 +226,7 @@ class ControlNode(Node):
         Returns:
             None
         """
-        self.spawn_initial_model()
-        for test_no in range(650, 660):  # Test numbers from 011 to 705
+        for test_no in range(11, 605):  # Test numbers from 011 to 705
             self.get_logger().info(f"Starting experiment on Test No: {test_no}")
 
             # Extract PGV, PGA, and PGV/PGA for the current test
@@ -274,6 +278,8 @@ class ControlNode(Node):
 
             # Reset the trajectory before the next test
             self.reset_trajectory()
+
+            self.rock_id = 2
 
             rclpy.spin_once(self, timeout_sec=0.001)
     def plot_pgv_pga(self, pga, pgv_to_pga, toppled):
@@ -367,7 +373,8 @@ class ControlNode(Node):
             if self.latest_pose:
                 self.get_logger().info(f"Checking pose for experiment {idx + 1}: {self.latest_pose}")
                 toppled = self.check_Toppled(self.latest_pose)
-                self.logData(A, F, toppled)
+                if self.enable_plotting:
+                    self.logData(A, F, toppled)
                 if toppled:
                     self.get_logger().info("The Rock has toppled")
                 else:
