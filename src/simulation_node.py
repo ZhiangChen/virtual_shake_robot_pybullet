@@ -56,7 +56,6 @@ class SimulationNode(Node):
             LoadDispl,
             'load_displ_action',
             execute_callback=self.execute_position_trajectory_callback
-
         )
 
         self.get_logger().info("Action server up and running!")
@@ -230,7 +229,7 @@ class SimulationNode(Node):
         self.client_id = self.server_connection()
 
 
-
+        self.ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
         self.rock_id = None
 
         self.setup_simulation()
@@ -303,6 +302,7 @@ class SimulationNode(Node):
         if request.action == "spawn":
 
             urdf_path = self.rock_structure_mesh_config['mesh']
+            urdf_path = os.path.join(self.ros2_ws, 'src', 'virtual_shake_robot_pybullet', urdf_path)
             rock_position = self.rock_structure_mesh_config['rock_position']  
             model_id = p.loadURDF(urdf_path, basePosition=rock_position, physicsClientId=self.client_id)
 
@@ -533,6 +533,7 @@ class SimulationNode(Node):
 
 
                 urdf_path = self.rock_structure_mesh_config['mesh']
+                urdf_path = os.path.join(self.ros2_ws, 'src', 'virtual_shake_robot_pybullet', urdf_path)
 
                 self.get_logger().info(f"Loading rock mesh from {urdf_path}...")
                 

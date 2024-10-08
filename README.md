@@ -81,7 +81,7 @@ Note: The physics parameters about the pedestal and world can be modified on `co
 
 ### Spawning PBR on top of the pedestal 
 
-Once we have a controller that can handle range of the A and F values, we are ready to spawn a PBR and carry out the experiment. VSR 2.0 supports two PBR options, a box PBR or a realistic PBR from a mesh file 
+VSR 2.0 supports two PBR options, a box PBR or a realistic PBR from a mesh file.
 
 
 To spawn the PBR using a mesh file, you can utilize the command:
@@ -122,68 +122,72 @@ For further details about the calculation, refer to the tutorial [inertia.md](do
 
 
 
-### Running the Experiment in Different Modes
+## Advanced Usage
 
-There are four distinct experiment modes, which can be triggered by setting the motion_mode parameter.
+### Different Control Modes
 
-Single Cosine Mode: This mode applies a single cosine motion based on provided A and F values and is the default mode.
+VSR 2.0 supports four control modes for a box pedestal, which can be triggered by setting the `motion_mode` parameter in `control_node.py`.
 
-The implementation for this experiment is given above in the README.md
+1. **Single Cosine Mode**  
+This mode applies a single cosine displacement motion based on provided A and F values and is the default mode.
+```
+ros2 launch virtual_shake_robot_pybullet box_launch.py
+```
 
-Grid Cosine Mode : 
+or 
 
-This mode generates a range of A and F values to simulate continuous experiments over a range of parameters.
+```
+ros2 launch virtual_shake_robot_pybullet box_launch.py motion_mode:=single_cosine
+```
+
+Results output: 
+
+2. **Grid Cosine Mode** 
+
+This mode generates a set of single cosine displacement motions based on a grid of PGA and PGV/PGA. The range of the grid is defined in the function `sample_motion_param` in `motion_node.py`.
 
 ```
 ros2 launch virtual_shake_robot_pybullet box_launch.py motion_mode:=grid_cosine
 ```
-Single Recording Mode:
 
-This mode runs experiments based on real data collected in the lab. Each test is conducted on the SP1 or SP2 mesh models, and the result (whether the rock toppled) is verified.
+Results output: 
 
-You can specify a particular test number:
+3. **Single Recording Mode**
 
-To trigger this :
+This mode runs experiments based on real data collected in the lab. Each test is conducted on the SP1 or SP2 mesh models.
 
-```
-ros2 launch virtual_shake_robot_pybullet sp1_launch.py motion_mode:=single_recording test_no:=11
-```
-
-After this you also need to launch the perception_node.py where we record the trajectory data.
+You can specify a particular test number, `test_no` between 11 and 705:
 
 ```
-ros2 run virtual_shake_robot_pybullet perception_node.py
-
+ros2 launch virtual_shake_robot_pybullet sp1_launch.py motion_mode:=single_recording test_no:=600
 ```
+Results output: 
 
-All Recording Mode :
+4. **All Recording Mode**
 
 This mode runs all the recorded tests consecutively.
 
 ```
 ros2 launch virtual_shake_robot_pybullet sp1_launch.py motion_mode:=all_recordings
 ```
-Similarly launch the perception_node.py
+
+Results output:
 
 
-
-
-## Parallel Simulation
+### Parallel Simulation
 
 The parallel simulation feature allows you to test different combinations of parameters simultaneously by leveraging multiple namespaces. This is particularly useful for running multiple instances of the experiment concurrently, reducing the time it takes to evaluate a wide range of physics parameters and their effects on PBR dynamics.
 
-## Namespaced Simulations
-
-By defining each simulation under its own namespace, we eliminate the need to generate separate YAML files for each experiment. This ensures that each simulation runs independently, even though the parameters and results are stored in shared directories. The use of ROS2 launch files enables seamless namespace management for multiple simulations.
 
 To set up the parallel simulation:
 
-1. Generate YAML and Launch Files for Each Namespace:
+1. Generate YAML and Launch files for parameter set:
  
  The script_generator.py automatically generates the required YAML files for each parameter combination and creates corresponding launch files under different namespaces.
 
 ```
-ros2 run virtual_shake_robot_pybullet script_generator.py
+cd ~/ros2_ws/src/virtual_shake_robot_pybullet/src
+python3 script_generator.py
 ```
 This script will:
 
@@ -191,11 +195,13 @@ This script will:
 - Create corresponding launch files for each generated YAML file.
 - Additionally, create a master launch file (e.g., {mesh_file_name}_master_launch.py) that launches all simulations in parallel.`
 
-2. Run the Master Launch File:
+2. Run the master Launch file:
 
 ```
 ros2 launch virtual_shake_robot_pybullet {mesh_file_name}_master_launch.py
 ```
+
+Note that you need to `colcon build`  before running the launch file. 
 
 3. Monitor the results
 

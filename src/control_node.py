@@ -106,7 +106,7 @@ class ControlNode(Node):
         self.test_no = self.declare_parameter('test_no', Parameter.Type.INTEGER, None).value
 
         if self.motion_mode == 'single_cosine':
-            self.run_single_cosine_experiment()
+            pass
         elif self.motion_mode == 'grid_cosine':
             self.run_grid_cosine_experiment()
         elif self.motion_mode == 'single_recording':
