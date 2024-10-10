@@ -179,6 +179,7 @@ src/combined_data.pkl
 recordings/
 recordings_new/
 plots/
+recordings_grid_cosine/
 
 
 # Ignore all generated launch files with numeric suffix (e.g., sp1_0.launch.py to sp1_95.launch.py)

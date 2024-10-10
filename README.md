@@ -141,6 +141,7 @@ ros2 launch virtual_shake_robot_pybullet box_launch.py motion_mode:=single_cosin
 ```
 
 Results output: 
+It will generate a .npy file will be save locally, that will record the actual rtrajectory of the pbr, and there is a graph of comparison for then actual and desired that can be turned on or off using a flag.
 
 2. **Grid Cosine Mode** 
 
@@ -186,8 +187,7 @@ To set up the parallel simulation:
  The script_generator.py automatically generates the required YAML files for each parameter combination and creates corresponding launch files under different namespaces.
 
 ```
-cd ~/ros2_ws/src/virtual_shake_robot_pybullet/src
-python3 script_generator.py
+ros2 launch virtual_shake_robot_pybullet script_generator.py
 ```
 This script will:
 
@@ -209,6 +209,79 @@ Each simulation will log its results in separate files, organized by namespace. 
 
 
 
+## Virtual Shake Robot Output Files Overview
+
+## Main Output: `.npy` File
+
+Regardless of the selected control mode or simulation type, the main output of the Virtual Shake Robot (VSR) simulations is an `.npy` file that records the detailed trajectory data. This file provides crucial insights into the dynamics of the Precariously Balanced Rock (PBR) during the simulation.
+
+### Content:
+The `.npy` file captures two key aspects of the simulation:
+- **Actual Trajectory**: The position of the PBR (x, y, z coordinates) recorded over the duration of the simulation. This data represents how the PBR moved in response to the simulated ground motions or control inputs.
+- **PBR Poses**: Includes detailed poses (position and orientation) of the PBR throughout the simulation, allowing for precise analysis of its stability and behavior under different conditions.
+
+### File Naming:
+- For simulations that run single tests or experiments, the `.npy` files are named based on the test number or parameter set (e.g., `trajectory_test_600.npy` for test number 600).
+- In parallel simulations, each `.npy` file is saved in a separate namespace to distinguish between different parameter combinations (e.g., `sim_96/trajectory.npy` for simulation 96).
+
+### Analysis and Visualization:
+- Users can analyze the trajectory data using Python or other tools to study the dynamics of the PBR.
+- The data can be plotted to compare the **actual vs. desired positions** of the PBR, which helps to evaluate the accuracy of the simulation.
+- A graph comparing actual and desired positions can be generated automatically if enabled, providing a visual representation of the PBR's movement relative to the expected motion.
+
+## How to Use the Output
+
+### 1. Post-Simulation Analysis:
+After running a simulation, you can load the `.npy` file using Python's NumPy library:
+
+```python
+import numpy as np
+
+# Load the trajectory data
+trajectory_data = np.load('path_to_output/trajectory_test_600.npy')
+
+# Extract positions and poses
+positions = trajectory_data[:, :3]  # x, y, z positions
+poses = trajectory_data[:, 3:]      # orientation data
+```
+
+This allows you to analyze the recorded data for detailed insights into the motion of the PBR.
+
+### 2. Comparing Simulations:
+When using parallel simulations, you can compare the `.npy` files from different namespaces to evaluate how different physics parameters affect the stability and movement of the PBR.
+
+### 3. Error Analysis:
+The `.npy` data allows for error analysis between the **target** (desired) and **actual** positions. By plotting these differences, you can assess how closely the simulation followed the intended motion pattern.
+
+## Example Visualization
+
+The generated `.npy` file can be used to create plots of the PBR's motion over time. Below is an example of a simple visualization using Matplotlib:
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Load the recorded trajectory
+data = np.load('path_to_output/trajectory_test_600.npy')
+
+# Extract time, x, y, z positions
+time = data[:, 0]  # Assuming the first column represents time
+x, y, z = data[:, 1], data[:, 2], data[:, 3]
+
+# Plot the trajectory
+plt.figure()
+plt.plot(time, x, label='X Position')
+plt.plot(time, y, label='Y Position')
+plt.plot(time, z, label='Z Position')
+plt.xlabel('Time (s)')
+plt.ylabel('Position (m)')
+plt.title('PBR Trajectory Over Time')
+plt.legend()
+plt.grid(True)
+plt.show()
+```
+
+This code snippet will generate a plot of the PBR's position over time, allowing you to visualize how it moved during the simulation.
 
 ## Memory Leak Issue
 During the VSR simulations, a memory leakage issue was observed, especially in long-running or parallel experiments. The memory leak was caused by several factors, including:

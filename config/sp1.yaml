@@ -7,6 +7,6 @@
       restitution: 0.3
       lateralFriction: 0.5
       spinningFriction: 0.3
-      contactDamping: 1000.0
+      contactDamping: 10000.0
       contactStiffness: 1000000.0
       rock_position: [0.0, 0.0, 2.80]

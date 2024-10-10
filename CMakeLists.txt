@@ -41,7 +41,6 @@ install(PROGRAMS
   src/simulation_node.py
   src/control_node.py
   src/pulse_motion_client.py
-  src/perception_node.py
   src/pbr_loader.py
   src/data_loader.py
   DESTINATION lib/${PROJECT_NAME}

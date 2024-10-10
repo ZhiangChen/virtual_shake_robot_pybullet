@@ -320,11 +320,10 @@ class SimulationNode(Node):
                 spinningFriction = self.rock_structure_mesh_config['spinningFriction']
                 contactDamping = self.rock_structure_mesh_config['contactDamping']
                 contactStiffness = self.rock_structure_mesh_config['contactStiffness']
-               
 
-
+              
                 p.changeDynamics(
-                    self.rock_id, -1,
+                    model_id, -1,
                     restitution=restitution,
                     lateralFriction=lateralFriction,
                     spinningFriction=spinningFriction,
@@ -336,7 +335,7 @@ class SimulationNode(Node):
                 self.intial_postion,self.intial_orientation = p.getBasePositionAndOrientation(self.rock_id, physicsClientId = self.client_id)
 
 
-                dynamics_info = p.getDynamicsInfo(self.rock_id, -1)
+                dynamics_info = p.getDynamicsInfo(model_id, -1)
                 
                    
                 self.get_logger().info(f"Mass: {dynamics_info[0]}")
@@ -485,6 +484,16 @@ class SimulationNode(Node):
 
         self.robot_id = base
         self.get_logger().info(f"Combined world box and pedestal created with ID: {self.robot_id}")
+
+        p.changeDynamics(
+        self.robot_id, 0,  
+        restitution=self.dynamics_config['pedestal']['restitution'],
+        lateralFriction=self.dynamics_config['pedestal']['lateralFriction'],
+        spinningFriction=self.dynamics_config['pedestal']['spinningFriction'],
+        contactDamping=self.dynamics_config['pedestal']['contactDamping'],
+        contactStiffness=self.dynamics_config['pedestal']['contactStiffness'],
+        physicsClientId=self.client_id
+    )
 
         # Enable collision for the base
         p.setCollisionFilterGroupMask(self.robot_id, -1, collisionFilterGroup=1, collisionFilterMask=1)
@@ -685,7 +694,13 @@ class SimulationNode(Node):
             if self.rock_id is not None:
                 pbr_position, pbr_orientation = p.getBasePositionAndOrientation(self.rock_id, physicsClientId=self.client_id)
             
-    
+            pose_msg = PoseStamped()
+            pose_msg.header.stamp = self.get_clock().now().to_msg()
+            pose_msg.header.frame_id = "world"
+            pose_msg.pose.position = Point(x=pbr_position[0], y=pbr_position[1], z=pbr_position[2])
+            pose_msg.pose.orientation = Quaternion(x=pbr_orientation[0], y=pbr_orientation[1], z=pbr_orientation[2], w=pbr_orientation[3])
+            self.pbr_pose_publisher.publish(pose_msg)
+
 
             # Append data to simulation_data (to be saved later: timestamp, target position, actual position, PBR pose)
             simulation_data.append([
@@ -779,14 +794,10 @@ class SimulationNode(Node):
         """
         self.logger.info("Executing trajectory callback...")
 
-
+        # Initialize lists to store data for plotting and saving
         desired_positions = []
         desired_velocities = []
-
-
-        desired_positions.clear()
-        desired_velocities.clear()
-        
+        simulation_data = []  # This will contain all the relevant data
 
         client_id = self.client_id
         robot_id = goal_handle.request.robot_id
@@ -794,7 +805,8 @@ class SimulationNode(Node):
         velocities = goal_handle.request.velocity_list
         timestamps = goal_handle.request.timestamp_list
         response_wait_time = goal_handle.request.response_wait_time
-
+        amplitude = goal_handle.request.amplitude
+        frequency = goal_handle.request.frequency
         feedback_msg = TrajectoryAction.Feedback()
 
         if not (len(positions) == len(velocities) == len(timestamps)):
@@ -805,17 +817,14 @@ class SimulationNode(Node):
         self.get_logger().info(f"Length of the trajectory: {len(positions)}")
         time_step = self.engine_settings['timestep']
 
-        actual_positions = []
-        actual_velocities = []
-
         loop_start_time = time.time()  # Record the start time of the loop
 
         for i in range(len(timestamps)):
             iteration_start_time = time.time()  # Record the start time of this iteration
 
+            # Capture the desired positions and velocities for logging
             desired_positions.append(positions[i])
             desired_velocities.append(velocities[i])
-            timestamps.append(timestamps[i])
 
             self.desired_position_publisher.publish(Float64(data=positions[i]))
             self.desired_velocity_publisher.publish(Float64(data=velocities[i]))
@@ -835,13 +844,33 @@ class SimulationNode(Node):
             p.stepSimulation(physicsClientId=client_id)
 
             # Capture the actual joint state
-            actual_positions.clear()
-            actual_velocities.clear()
             joint_state = p.getJointState(robot_id, 0, physicsClientId=client_id)
             actual_position, actual_velocity = joint_state[0], joint_state[1]
 
-            actual_positions.append(actual_position)
-            actual_velocities.append(actual_velocity)
+            # Get the pose of the PBR model and save the pose information
+            if self.rock_id is not None:
+                pbr_position, pbr_orientation = p.getBasePositionAndOrientation(self.rock_id, physicsClientId=client_id)
+
+
+                # Create a PoseStamped message
+                pose_msg = PoseStamped()
+                pose_msg.header.stamp = self.get_clock().now().to_msg()
+                pose_msg.header.frame_id = "world"
+
+                pose_msg.pose.position = Point(x=pbr_position[0], y=pbr_position[1], z=pbr_position[2])
+                pose_msg.pose.orientation = Quaternion(x=pbr_orientation[0], y=pbr_orientation[1], z=pbr_orientation[2], w=pbr_orientation[3])
+
+                # Publish the PoseStamped message
+                self.pbr_pose_publisher.publish(pose_msg)
+
+            # Append data to simulation_data (to be saved later: timestamp, actual position, velocity, PBR pose)
+            simulation_data.append([
+                timestamps[i],
+                actual_position,
+                actual_velocity,
+                pbr_position[0], pbr_position[1], pbr_position[2],
+                pbr_orientation[0], pbr_orientation[1], pbr_orientation[2], pbr_orientation[3]
+            ])
 
             # Publish the actual position and velocity
             self.position_publisher.publish(Float64(data=actual_position))
@@ -860,11 +889,25 @@ class SimulationNode(Node):
             if self.realtime_flag and sleep_time > 0:
                 time.sleep(sleep_time)
 
-        
-
         loop_end_time = time.time()  # Record the end time of the loop
         total_execution_time = loop_end_time - loop_start_time  # Calculate the total execution time
         self.get_logger().info(f"Total execution time: {total_execution_time} seconds")
+
+        # After the loop, save the simulation data to a numpy file
+        ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
+        recordings_folder = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet', 'recordings_grid_cosine')
+        os.makedirs(recordings_folder, exist_ok=True)
+
+        
+        file_name = f"trajectory_pos_vel_{amplitude}_{frequency}.npy"
+        file_path = os.path.join(recordings_folder, file_name)
+
+        # Save the simulation data to a numpy file (timestamps, actual_positions, actual_velocities, pbr_poses)
+        self.get_logger().info(f"Length of the .npy file(before): {len(simulation_data)}")
+        np.save(file_path, np.array(simulation_data))
+        self.get_logger().info(f"Simulation data saved to {file_path}")
+        del simulation_data
+        gc.collect()
 
         # Wait for the specified wait time after the trajectory execution
         self.get_logger().info(f"Waiting for {response_wait_time} seconds after trajectory completion.")
@@ -874,31 +917,11 @@ class SimulationNode(Node):
             if self.realtime_flag:
                 time.sleep(time_step)
 
-        # Get the position and orientation of the PBR
-        if self.rock_id is not None:
-            pbr_position, pbr_orientation = p.getBasePositionAndOrientation(self.rock_id, physicsClientId=client_id)
-
-            # Create a PoseStamped message
-            pose_msg = PoseStamped()
-            pose_msg.header.stamp = self.get_clock().now().to_msg()
-            pose_msg.header.frame_id = "world"
-
-            pose_msg.pose.position = Point(x=pbr_position[0], y=pbr_position[1], z=pbr_position[2])
-            pose_msg.pose.orientation = Quaternion(x=pbr_orientation[0], y=pbr_orientation[1], z=pbr_orientation[2], w=pbr_orientation[3])
-
-            # Publish the PoseStamped message
-            self.pbr_pose_publisher.publish(pose_msg)
-        
-
         self.get_logger().info("Trajectory execution completed successfully.")
         goal_handle.succeed()
         result = TrajectoryAction.Result()
         result.success = True
-        result.actual_positions = actual_positions
-        result.actual_velocities = actual_velocities
         return result
-      
-
 
 
 
