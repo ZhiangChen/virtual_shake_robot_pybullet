@@ -22,6 +22,7 @@
    Inside the cloned repository, build the Docker image with the following command:
 
    ```bash
+   cd docker
    docker build -t vsr_pybullet .
    ```
 

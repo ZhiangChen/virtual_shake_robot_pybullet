@@ -97,7 +97,7 @@ class SimulationNode(Node):
 
 
         #adding a realtime_flag to control the time_sleep
-        self.declare_parameter('realtime_flag', True)
+        self.declare_parameter('realtime_flag', False)
 
         self.realtime_flag = self.get_parameter('realtime_flag').value
         self.declare_parameter('enable_plotting', False)  # Declare as a ROS2 parameter
@@ -334,16 +334,25 @@ class SimulationNode(Node):
 
                 self.intial_postion,self.intial_orientation = p.getBasePositionAndOrientation(self.rock_id, physicsClientId = self.client_id)
 
+                # Retrieve PBR dynamics
+                pbr_dynamics_info = p.getDynamicsInfo(self.rock_id, -1)
+                restitution = pbr_dynamics_info[5]
+                lateralFriction = pbr_dynamics_info[1]
+                spinningFriction = pbr_dynamics_info[7]
+                contactDamping = pbr_dynamics_info[8]
+                contactStiffness = pbr_dynamics_info[9]
 
-                dynamics_info = p.getDynamicsInfo(model_id, -1)
-                
-                   
-                self.get_logger().info(f"Mass: {dynamics_info[0]}")
-                self.get_logger().info(f"Lateral Friction: {dynamics_info[1]}")
-                self.get_logger().info(f"Restitution: {dynamics_info[5]}")
-                self.get_logger().info(f"Spinning Friction: {dynamics_info[7]}")
-                self.get_logger().info(f"Contact Damping: {dynamics_info[8]}")
-                self.get_logger().info(f"Contact Stiffness: {dynamics_info[9]}")
+                p.changeDynamics(
+                self.robot_id, 0,
+                restitution=restitution,
+                lateralFriction=lateralFriction,
+                spinningFriction=spinningFriction,
+                contactDamping=contactDamping,
+                contactStiffness=contactStiffness,
+                physicsClientId=self.client_id
+            )
+                pedestal_dynamics = p.getDynamicsInfo(self.robot_id, 0)
+                self.get_logger().info(f"Updated pedestal dynamics: {pedestal_dynamics}")   
 
                 # Wait after spawning the model
                 self.get_logger().info(f'Waiting for {model_wait_time} seconds after model spawn.')
@@ -378,32 +387,34 @@ class SimulationNode(Node):
         elif request.action == "reset":
             if self.rock_id is not None:
                 
+                # Reset the position and orientation of the rock
                 p.resetBasePositionAndOrientation(
                     self.rock_id,
                     self.intial_postion,
                     self.intial_orientation,
-                    physicsClientId = self.client_id
+                    physicsClientId=self.client_id
                 )
+                self.get_logger().info(f"Rock model with ID {self.rock_id} has been reset")
+
+                # Reset the base velocity of the pedestal (robot_id)
+                p.resetBaseVelocity(
+                    objectUniqueId=self.robot_id,
+                    linearVelocity=[0, 0, 0],
+                    angularVelocity=[0, 0, 0],
+                    physicsClientId=self.client_id
+                )
+                self.get_logger().info(f"Pedestal with ID {self.robot_id} velocity has been reset")
+
+
                 response.success = True
-                response.message = f"Rock model with {self.rock_id} has been reset"
-                self.get_logger().info(f"Rock model with {self.rock_id} has been reset")
+                response.message = f"Rock and pedestal have been reset"
+            else:
+                response.success = False
+                response.message = "Rock ID is not set."
+                self.get_logger().info(response.message)
 
-                p.setJointMotorControl2(
-                        bodyUniqueId=self.robot_id,
-                        jointIndex=0,
-                        controlMode=p.POSITION_CONTROL,
-                        targetPosition=0,
-                        targetVelocity=0,
-                        force=5 * 10**8,
-                        maxVelocity=200,
-                        physicsClientId=self.client_id
-                    )
 
-        else:
-            response.success = False
-            response.message = "Unknown action."
-            self.get_logger().info(response.message)  # Log the unknown action
-
+           
         return response
     
     def create_robot(self):
@@ -744,7 +755,7 @@ class SimulationNode(Node):
 
         # After the loop, save the simulation data to a numpy file
         ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
-        recordings_folder = os.path.join(ros2_ws,'src' ,'virtual_shake_robot_pybullet', 'recordings_new')
+        recordings_folder = os.path.join(ros2_ws,'src' ,'virtual_shake_robot_pybullet', 'recordings_gui_off_rtf_off')
         os.makedirs(recordings_folder, exist_ok=True)
 
         full_namespace = self.get_namespace()

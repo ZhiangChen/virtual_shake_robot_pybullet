@@ -31,6 +31,15 @@ Please follow the instruction to install ROS2 and create a ROS2 workspace `~\ros
 
 This repository should not have compatability issues with many ROS2 versions. We have developed the package based on ROS2 Humble. Here is the installation guide for our setup [ROS2_humble_installation](docs/ROS_installation.md)
 
+#### Dependencies
+
+To install all the depencies, required to run this package we have a requirements.txt file which you can use to install them:
+
+```
+pip install -r requirements.txt
+
+```
+
 #### virtual_shake_robot_pybullet
 Clone the repository into your workspace: 
 ```
@@ -140,8 +149,6 @@ or
 ros2 launch virtual_shake_robot_pybullet box_launch.py motion_mode:=single_cosine
 ```
 
-Results output: 
-It will generate a .npy file will be save locally, that will record the actual rtrajectory of the pbr, and there is a graph of comparison for then actual and desired that can be turned on or off using a flag.
 
 2. **Grid Cosine Mode** 
 
@@ -151,7 +158,6 @@ This mode generates a set of single cosine displacement motions based on a grid 
 ros2 launch virtual_shake_robot_pybullet box_launch.py motion_mode:=grid_cosine
 ```
 
-Results output: 
 
 3. **Single Recording Mode**
 
@@ -162,7 +168,6 @@ You can specify a particular test number, `test_no` between 11 and 705:
 ```
 ros2 launch virtual_shake_robot_pybullet sp1_launch.py motion_mode:=single_recording test_no:=600
 ```
-Results output: 
 
 4. **All Recording Mode**
 
@@ -171,9 +176,6 @@ This mode runs all the recorded tests consecutively.
 ```
 ros2 launch virtual_shake_robot_pybullet sp1_launch.py motion_mode:=all_recordings
 ```
-
-Results output:
-
 
 ### Parallel Simulation
 
@@ -205,7 +207,7 @@ Note that you need to `colcon build`  before running the launch file.
 
 3. Monitor the results
 
-Each simulation will log its results in separate files, organized by namespace. This allows you to later compare the behaviors of PBRs across different parameter combinations.
+    Each simulation will log its results in separate files, organized by namespace. This allows you to later compare the behaviors of PBRs across different parameter combinations.
 
 
 
@@ -213,7 +215,7 @@ Each simulation will log its results in separate files, organized by namespace. 
 
 ## Main Output: `.npy` File
 
-Regardless of the selected control mode or simulation type, the main output of the Virtual Shake Robot (VSR) simulations is an `.npy` file that records the detailed trajectory data. This file provides crucial insights into the dynamics of the Precariously Balanced Rock (PBR) during the simulation.
+Regardless of the selected control mode or simulation type, the main output of the VSR simulations is an `.npy` file that records the detailed trajectory data. This file provides crucial insights into the dynamics of the PBR during the simulation.
 
 ### Content:
 The `.npy` file captures two key aspects of the simulation:
@@ -226,62 +228,10 @@ The `.npy` file captures two key aspects of the simulation:
 
 ### Analysis and Visualization:
 - Users can analyze the trajectory data using Python or other tools to study the dynamics of the PBR.
-- The data can be plotted to compare the **actual vs. desired positions** of the PBR, which helps to evaluate the accuracy of the simulation.
-- A graph comparing actual and desired positions can be generated automatically if enabled, providing a visual representation of the PBR's movement relative to the expected motion.
+- The data can be plotted to compare the **actual vs. desired positions** of the pedestal, which helps to evaluate the accuracy of the simulation.
+- A graph comparing actual and desired positions can be generated automatically if enabled, providing a visual representation of the Pedestal's movement relative to the expected motion.
 
-## How to Use the Output
-
-### 1. Post-Simulation Analysis:
-After running a simulation, you can load the `.npy` file using Python's NumPy library:
-
-```python
-import numpy as np
-
-# Load the trajectory data
-trajectory_data = np.load('path_to_output/trajectory_test_600.npy')
-
-# Extract positions and poses
-positions = trajectory_data[:, :3]  # x, y, z positions
-poses = trajectory_data[:, 3:]      # orientation data
-```
-
-This allows you to analyze the recorded data for detailed insights into the motion of the PBR.
-
-### 2. Comparing Simulations:
-When using parallel simulations, you can compare the `.npy` files from different namespaces to evaluate how different physics parameters affect the stability and movement of the PBR.
-
-### 3. Error Analysis:
-The `.npy` data allows for error analysis between the **target** (desired) and **actual** positions. By plotting these differences, you can assess how closely the simulation followed the intended motion pattern.
-
-## Example Visualization
-
-The generated `.npy` file can be used to create plots of the PBR's motion over time. Below is an example of a simple visualization using Matplotlib:
-
-```python
-import numpy as np
-import matplotlib.pyplot as plt
-
-# Load the recorded trajectory
-data = np.load('path_to_output/trajectory_test_600.npy')
-
-# Extract time, x, y, z positions
-time = data[:, 0]  # Assuming the first column represents time
-x, y, z = data[:, 1], data[:, 2], data[:, 3]
-
-# Plot the trajectory
-plt.figure()
-plt.plot(time, x, label='X Position')
-plt.plot(time, y, label='Y Position')
-plt.plot(time, z, label='Z Position')
-plt.xlabel('Time (s)')
-plt.ylabel('Position (m)')
-plt.title('PBR Trajectory Over Time')
-plt.legend()
-plt.grid(True)
-plt.show()
-```
-
-This code snippet will generate a plot of the PBR's position over time, allowing you to visualize how it moved during the simulation.
+For the output visualization, on how to use the .npy file we have a tutorial [Anaylsis.md](docs/Analysis.md)
 
 ## Memory Leak Issue
 During the VSR simulations, a memory leakage issue was observed, especially in long-running or parallel experiments. The memory leak was caused by several factors, including:

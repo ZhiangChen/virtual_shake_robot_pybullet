@@ -43,6 +43,7 @@ install(PROGRAMS
   src/pulse_motion_client.py
   src/pbr_loader.py
   src/data_loader.py
+  src/script_generator.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

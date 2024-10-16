@@ -5,12 +5,12 @@
         restitution: 0.3
         lateralFriction: 0.5
         spinningFriction: 0.3
-        contactDamping: 10000.0
+        contactDamping: 100000.0
         contactStiffness: 1000000.0
       pedestal:
         restitution: 0.3
-        lateralFriction: 0.5
-        spinningFriction: 0.3
+        lateralFriction: 0.3
+        spinningFriction: 0.1
         contactDamping: 10000.0
         contactStiffness: 1000000.0
       
