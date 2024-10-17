@@ -31,6 +31,15 @@ Please follow the instruction to install ROS2 and create a ROS2 workspace `~\ros
 
 This repository should not have compatability issues with many ROS2 versions. We have developed the package based on ROS2 Humble. Here is the installation guide for our setup [ROS2_humble_installation](docs/ROS_installation.md)
 
+#### Dependencies
+
+To install all the depencies, required to run this package we have a requirements.txt file which you can use to install them:
+
+```
+pip install -r requirements.txt
+
+```
+
 #### virtual_shake_robot_pybullet
 Clone the repository into your workspace: 
 ```
@@ -140,7 +149,6 @@ or
 ros2 launch virtual_shake_robot_pybullet box_launch.py motion_mode:=single_cosine
 ```
 
-Results output: 
 
 2. **Grid Cosine Mode** 
 
@@ -150,7 +158,6 @@ This mode generates a set of single cosine displacement motions based on a grid 
 ros2 launch virtual_shake_robot_pybullet box_launch.py motion_mode:=grid_cosine
 ```
 
-Results output: 
 
 3. **Single Recording Mode**
 
@@ -161,7 +168,6 @@ You can specify a particular test number, `test_no` between 11 and 705:
 ```
 ros2 launch virtual_shake_robot_pybullet sp1_launch.py motion_mode:=single_recording test_no:=600
 ```
-Results output: 
 
 4. **All Recording Mode**
 
@@ -170,9 +176,6 @@ This mode runs all the recorded tests consecutively.
 ```
 ros2 launch virtual_shake_robot_pybullet sp1_launch.py motion_mode:=all_recordings
 ```
-
-Results output:
-
 
 ### Parallel Simulation
 
@@ -186,8 +189,7 @@ To set up the parallel simulation:
  The script_generator.py automatically generates the required YAML files for each parameter combination and creates corresponding launch files under different namespaces.
 
 ```
-cd ~/ros2_ws/src/virtual_shake_robot_pybullet/src
-python3 script_generator.py
+ros2 launch virtual_shake_robot_pybullet script_generator.py
 ```
 This script will:
 
@@ -205,10 +207,31 @@ Note that you need to `colcon build`  before running the launch file.
 
 3. Monitor the results
 
-Each simulation will log its results in separate files, organized by namespace. This allows you to later compare the behaviors of PBRs across different parameter combinations.
+    Each simulation will log its results in separate files, organized by namespace. This allows you to later compare the behaviors of PBRs across different parameter combinations.
 
 
 
+## Virtual Shake Robot Output Files Overview
+
+## Main Output: `.npy` File
+
+Regardless of the selected control mode or simulation type, the main output of the VSR simulations is an `.npy` file that records the detailed trajectory data. This file provides crucial insights into the dynamics of the PBR during the simulation.
+
+### Content:
+The `.npy` file captures two key aspects of the simulation:
+- **Actual Trajectory of the pedestal**: The position of the pedestal (x, y, z coordinates) recorded over the duration of the simulation. This data represents how the pedestal moved in response to the simulated ground motions or control inputs.
+- **PBR Poses and orientation**: Includes detailed poses (position and orientation) of the PBR throughout the simulation, allowing for precise analysis of its stability and behavior under different conditions.
+
+### File Naming:
+- For simulations that run single tests or experiments, the `.npy` files are named based on the test number or parameter set (e.g., `trajectory_test_600.npy` for test number 600).
+- In parallel simulations, each `.npy` file is saved in a separate namespace to distinguish between different parameter combinations (e.g., `sim_96/trajectory.npy` for simulation 96).
+
+### Analysis and Visualization:
+- Users can analyze the trajectory data using Python or other tools to study the dynamics of the PBR.
+- The data can be plotted to compare the **actual vs. desired positions** of the pedestal, which helps to evaluate the accuracy of the simulation.
+- A graph comparing actual and desired positions can be generated automatically if enabled, providing a visual representation of the Pedestal's movement relative to the expected motion.
+
+For the output visualization, on how to use the .npy file we have a tutorial [Anaylsis.md](docs/analysis.md)
 
 ## Memory Leak Issue
 During the VSR simulations, a memory leakage issue was observed, especially in long-running or parallel experiments. The memory leak was caused by several factors, including:

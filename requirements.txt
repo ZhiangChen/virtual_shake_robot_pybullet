@@ -1,0 +1,6 @@
+numpy==1.26.1
+objgraph
+memory-profiler
+transforms3d
+pandas
+openpyxl

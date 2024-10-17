@@ -137,14 +137,13 @@ class ControlNode(Node):
         if test_no in self.combined_data:
             test_data = self.combined_data[test_no]
             self.get_logger().info(f"Data type of test_data: {type(test_data)}")
-            self.get_logger().info(f"Loaded data for Test No: {test_no}: {list(test_data.keys())[:10]}")
+            
 
             time_vs_displacement_df = test_data['Time vs Displacement']
-            self.get_logger().info(f"Time vs Displacement Data (first 10 rows):\n{time_vs_displacement_df.head(10)}")
+           
 
             timestamps = time_vs_displacement_df.iloc[:, 0].tolist()
-            self.get_logger().info(f"Timestamps (first 10): {timestamps[:10]}")
-            self.get_logger().info(f"Total timestamps: {len(timestamps)}")
+            
 
             positions = time_vs_displacement_df.iloc[:, 1].tolist()
             self.get_logger().info(f"Sending displacement data for Test No: {test_no}")
@@ -196,9 +195,10 @@ class ControlNode(Node):
         Returns:
             None
         """
+    
         self.latest_pose = msg.pose
         self.new_pose_received = True
-        # self.get_logger().info(f"Pose received: {self.latest_pose}")
+        
 
     def sample_motion_param(self):
         """
@@ -226,7 +226,7 @@ class ControlNode(Node):
         Returns:
             None
         """
-        for test_no in range(11, 605):  # Test numbers from 011 to 705
+        for test_no in range(11, 705):  # Test numbers from 011 to 705
             self.get_logger().info(f"Starting experiment on Test No: {test_no}")
 
             # Extract PGV, PGA, and PGV/PGA for the current test
@@ -235,8 +235,6 @@ class ControlNode(Node):
                 pgv_to_pga = test_data['PGV/PGA']
                 pga = test_data['Scaled PGA']
 
-                # Start recording with the extracted values, including the test_no
-                # self.send_recording_goal('start', pga, pgv_to_pga, test_no)
                 self.get_logger().info(f"Started recording for Test No: {test_no} with PGA: {pga}, PGV/PGA: {pgv_to_pga}, and Test No: {test_no}")
             else:
                 self.get_logger().error(f"No data available for Test No: {test_no}. Skipping this test.")
@@ -274,10 +272,6 @@ class ControlNode(Node):
             
             # Delete and respawn the model for the next test
             self.reset_model_postion_and_orientation()
-
-
-            # Reset the trajectory before the next test
-            self.reset_trajectory()
 
             self.rock_id = 2
 
@@ -358,7 +352,7 @@ class ControlNode(Node):
             self.get_logger().info(f'Starting experiment {idx + 1}/{len(FA_data)} with Amplitude: {self.amplitude}, Frequency: {self.frequency}')
 
             self.new_pose_received = False  # Reset the flag before sending the trajectory goal
-            # self.send_recording_goal('start', A, F)
+            
             self.calculate_and_send_trajectory()
 
             self.get_logger().info(f'Waiting for {self.response_wait_time} seconds for trajectory to complete.')
@@ -385,10 +379,10 @@ class ControlNode(Node):
             self.get_logger().info(f"Breaking here")
 
             self.reset_model_postion_and_orientation()
-            self.reset_trajectory()
+            
 
         self.get_logger().info(f"Completed all {len(FA_data)} experiments")
-        # self.send_recording_goal('stop', A, F)
+      
 
     def reset_model_postion_and_orientation(self):
 
@@ -402,6 +396,7 @@ class ControlNode(Node):
 
         if reset_future.result().success:
             self.get_logger().info("Model reset successfully")
+            time.sleep(self.response_wait_time)
         else:
             self.get_logger().info(f"Failed to reset, {reset_future.result().message}")
 
@@ -724,6 +719,8 @@ class ControlNode(Node):
         trajectory_goal.velocity_list = velocities
         trajectory_goal.timestamp_list = timestamps
         trajectory_goal.response_wait_time = self.response_wait_time
+        trajectory_goal.amplitude = self.amplitude
+        trajectory_goal.frequency = self.frequency
 
         self.get_logger().info("Sending trajectory goal with positions, velocities, and timestamps.")
         if not self._trajectory_action_client.wait_for_server(timeout_sec=10.0):
