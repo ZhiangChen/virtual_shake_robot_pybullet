@@ -211,9 +211,7 @@ Note that you need to `colcon build`  before running the launch file.
 
 
 
-## Virtual Shake Robot Output Files Overview
-
-## Main Output: `.npy` File
+## Virtual Shake Robot Output Files
 
 Regardless of the selected control mode or simulation type, the main output of the VSR simulations is an `.npy` file that records the detailed trajectory data. This file provides crucial insights into the dynamics of the PBR during the simulation.
 
