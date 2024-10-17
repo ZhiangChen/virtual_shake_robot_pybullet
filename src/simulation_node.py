@@ -97,7 +97,7 @@ class SimulationNode(Node):
 
 
         #adding a realtime_flag to control the time_sleep
-        self.declare_parameter('realtime_flag', False)
+        self.declare_parameter('realtime_flag', True)
 
         self.realtime_flag = self.get_parameter('realtime_flag').value
         self.declare_parameter('enable_plotting', False)  # Declare as a ROS2 parameter

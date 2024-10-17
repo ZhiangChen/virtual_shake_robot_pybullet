@@ -219,8 +219,8 @@ Regardless of the selected control mode or simulation type, the main output of t
 
 ### Content:
 The `.npy` file captures two key aspects of the simulation:
-- **Actual Trajectory**: The position of the PBR (x, y, z coordinates) recorded over the duration of the simulation. This data represents how the PBR moved in response to the simulated ground motions or control inputs.
-- **PBR Poses**: Includes detailed poses (position and orientation) of the PBR throughout the simulation, allowing for precise analysis of its stability and behavior under different conditions.
+- **Actual Trajectory of the pedestal**: The position of the pedestal (x, y, z coordinates) recorded over the duration of the simulation. This data represents how the pedestal moved in response to the simulated ground motions or control inputs.
+- **PBR Poses and orientation**: Includes detailed poses (position and orientation) of the PBR throughout the simulation, allowing for precise analysis of its stability and behavior under different conditions.
 
 ### File Naming:
 - For simulations that run single tests or experiments, the `.npy` files are named based on the test number or parameter set (e.g., `trajectory_test_600.npy` for test number 600).
@@ -231,7 +231,7 @@ The `.npy` file captures two key aspects of the simulation:
 - The data can be plotted to compare the **actual vs. desired positions** of the pedestal, which helps to evaluate the accuracy of the simulation.
 - A graph comparing actual and desired positions can be generated automatically if enabled, providing a visual representation of the Pedestal's movement relative to the expected motion.
 
-For the output visualization, on how to use the .npy file we have a tutorial [Anaylsis.md](docs/Analysis.md)
+For the output visualization, on how to use the .npy file we have a tutorial [Anaylsis.md](docs/analysis.md)
 
 ## Memory Leak Issue
 During the VSR simulations, a memory leakage issue was observed, especially in long-running or parallel experiments. The memory leak was caused by several factors, including:
