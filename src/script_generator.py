@@ -1,6 +1,8 @@
+#!/usr/bin/env python3
 import os
 import yaml
 import itertools
+import numpy as np
 
 def generate_yaml_files(output_dir, base_content, parameter_combinations, model_choice):
     os.makedirs(output_dir, exist_ok=True)
@@ -12,7 +14,7 @@ def generate_yaml_files(output_dir, base_content, parameter_combinations, model_
         mesh_path = os.path.join(ros2_ws, 'src','virtual_shake_robot_pybullet/models/SP1_PBRmodel/sp1.urdf')
     elif model_choice == 'sp2':
         mesh_path = os.path.join(ros2_ws, 'src','virtual_shake_robot_pybullet/models/SP2_PBRmodel/sp2.urdf')
-    else:  # default to pbr_mesh'
+    else:  # default to pbr_mesh
         mesh_path = os.path.join(ros2_ws, 'src','virtual_shake_robot_pybullet/models/double_rock_pbr/pbr_mesh.urdf')
 
     yaml_files = []
@@ -131,6 +133,84 @@ def generate_launch_description():
 
     return launch_file_paths
 
+def generate_range(min_val, max_val, step):
+    """ Helper function to generate range based on min, max, and step values. """
+    return list(np.arange(min_val, max_val + step, step))
+
+def iterative_search(output_dir, base_content, model_choice):
+    os.makedirs(output_dir, exist_ok=True)
+
+    ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
+
+    # Update the mesh path based on the model choice
+    if model_choice == 'sp1':
+        mesh_path = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet/models/SP1_PBRmodel/sp1.urdf')
+    elif model_choice == 'sp2':
+        mesh_path = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet/models/SP2_PBRmodel/sp2.urdf')
+    else:
+        mesh_path = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet/models/double_rock_pbr/pbr_mesh.urdf')
+
+    yaml_files = []
+
+    # Define base values for all parameters
+    base_params = {
+        'mesh': mesh_path,
+        'meshScale': [1.0, 1.0, 1.0],
+        'mass': 353.802,
+        'restitution': 0.30,
+        'lateralFriction': 0.50,
+        'spinningFriction': 0.10,
+        'contactDamping': 1e4,
+        'contactStiffness': 1e6,
+        'rock_position': [0.0, 0.0, 2.78]
+    }
+
+    # Define the ranges for each parameter
+    parameter_ranges = {
+        'restitution': [0.2, 0.4, 0.6, 0.8],
+        'lateralFriction': [0.01, 0.11, 0.21, 0.31, 0.41],
+        'spinningFriction': [0.01, 0.11, 0.21, 0.31, 0.41],
+        'contactDamping': [1e3, 1e4, 1e5, 1e6, 1e7],
+        'contactStiffness': [1e4, 1e5, 1e6, 1e7, 1e8]
+    }
+
+    # Initialize a counter for naming the files as sp1_0.yaml, sp1_1.yaml, sp1_2.yaml, etc.
+    file_counter = 0
+
+    # For each parameter, change only one value at a time, keeping others as their base value
+    for param, values in parameter_ranges.items():
+        for value in values:
+            # Start with the base values and update only the current parameter
+            current_params = base_params.copy()
+            current_params[param] = value
+
+            # Prepare the content for the YAML file
+            content = base_content.copy()
+            content['/**']['ros__parameters']['rock_structure_mesh'] = current_params.copy()
+
+            # Naming each YAML file sequentially, using the model_choice and counter
+            filename = f"{model_choice}_{file_counter}.yaml"
+            file_path = os.path.join(output_dir, filename)
+
+            # Check if the file already exists to avoid overwriting
+            if os.path.exists(file_path):
+                print(f"Duplicate found, skipping: {file_path}")
+                continue
+
+            # Save the YAML file with the full structure
+            with open(file_path, 'w') as file:
+                yaml.safe_dump(content, file, default_flow_style=None, sort_keys=False, indent=2, width=120)
+
+            print(f'Generated: {file_path}')
+            yaml_files.append(file_path)
+
+            # Increment the counter for each file generated
+            file_counter += 1
+
+    return yaml_files
+
+
+
 def generate_master_launch_file(launch_files, output_dir, model_choice):
     master_launch_content = """
 #!/usr/bin/env python3
@@ -178,22 +258,32 @@ def main():
     }
 
     model_choice = input("Select a model (pbr_mesh, sp1, sp2): ").strip().lower()
-
-    # Hardcoded ranges for the parameters
-    restitution_range = [0.3, 0.4, 0.5]
-    lateral_friction_range = [0.3, 0.5]
-    spinning_friction_range = [0.3, 0.5]
-    contact_damping_range = [10000.0, 20000.0]
-    contact_stiffness_range = [1000000.0, 2000000.0]
-
-    # Generate all combinations of the parameters
-    parameter_combinations = [
-        {'restitution': r, 'lateralFriction': lf, 'spinningFriction': sf, 'contactDamping': cd, 'contactStiffness': cs}
-        for r, lf, sf, cd, cs in itertools.product(restitution_range, lateral_friction_range, spinning_friction_range, contact_damping_range, contact_stiffness_range)
-    ]
+    generation_type = input("Choose generation type ('random' for random combinations, 'iterative' for iterative search): ").strip().lower()
 
     output_directory = os.path.join(os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws')),'src', 'virtual_shake_robot_pybullet/config')
-    yaml_files = generate_yaml_files(output_directory, base_yaml_content, parameter_combinations, model_choice)
+
+    if generation_type == 'random':
+        # Hardcoded ranges for the parameters
+        restitution_range = [0.3, 0.4, 0.5]
+        lateral_friction_range = [0.3, 0.5]
+        spinning_friction_range = [0.3, 0.5]
+        contact_damping_range = [10000.0, 20000.0]
+        contact_stiffness_range = [1000000.0, 2000000.0]
+
+        # Generate all combinations of the parameters
+        parameter_combinations = [
+            {'restitution': r, 'lateralFriction': lf, 'spinningFriction': sf, 'contactDamping': cd, 'contactStiffness': cs}
+            for r, lf, sf, cd, cs in itertools.product(restitution_range, lateral_friction_range, spinning_friction_range, contact_damping_range, contact_stiffness_range)
+        ]
+
+        yaml_files = generate_yaml_files(output_directory, base_yaml_content, parameter_combinations, model_choice)
+    
+    elif generation_type == 'iterative':
+        yaml_files = iterative_search(output_directory, base_yaml_content,model_choice)
+
+    else:
+        print("Invalid option selected. Exiting.")
+        return
 
     launch_files = generate_launch_files(os.path.join(os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws')), 'src','virtual_shake_robot_pybullet/launch'), yaml_files, model_choice)
 

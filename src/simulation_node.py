@@ -94,19 +94,15 @@ class SimulationNode(Node):
         # Manage model service
         self._manage_model_service = self.create_service(ManageModel, 'manage_model', self.manage_model_callback)
 
-
-
-        #adding a realtime_flag to control the time_sleep
-        self.declare_parameter('realtime_flag', True)
-
-        self.realtime_flag = self.get_parameter('realtime_flag').value
-        self.declare_parameter('enable_plotting', False)  # Declare as a ROS2 parameter
-        self.enable_plotting = self.get_parameter('enable_plotting').value
         
         #Declare parameters
         self.declare_parameters(
             namespace="",
             parameters=[
+
+                ('simSettings.realtime_flag', rclpy.Parameter.Type.BOOL),
+                ('simSettings.use_gui', rclpy.Parameter.Type.BOOL),
+                ('simSettings.enable_plotting', rclpy.Parameter.Type.BOOL),
                 ('engineSettings.loading_wait_time', rclpy.Parameter.Type.DOUBLE),
                 ('engineSettings.gravity', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('engineSettings.timeStep', rclpy.Parameter.Type.DOUBLE),
@@ -224,10 +220,11 @@ class SimulationNode(Node):
 
         }
 
+        self.realtime_flag = self.get_parameter('simSettings.realtime_flag').value
+        self.use_gui = self.get_parameter('simSettings.use_gui').value
+        self.enable_plotting = self.get_parameter('simSettings.enable_plotting').value
 
-   
-        self.client_id = self.server_connection()
-
+        self.client_id = self.server_connection(self.use_gui)
 
         self.ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
         self.rock_id = None
@@ -236,7 +233,7 @@ class SimulationNode(Node):
         self.create_robot()
         
 
-    def server_connection(self, use_gui=True):
+    def server_connection(self, use_gui):
         """
         Establishes a connection to the PyBullet server with an optional GUI.
 

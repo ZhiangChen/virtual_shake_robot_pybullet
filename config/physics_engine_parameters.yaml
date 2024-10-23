@@ -12,3 +12,8 @@
       response_wait_time : 5.0
       loading_wait_time : 5.0
 
+    simSettings:
+
+      realtime_flag: false
+      use_gui: true
+      enable_plotting: false
