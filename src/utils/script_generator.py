@@ -3,8 +3,9 @@ import os
 import yaml
 import itertools
 import numpy as np
+import csv
 
-def generate_yaml_files(output_dir, base_content, parameter_combinations, model_choice):
+def generate_yaml_files(output_dir, base_content, parameter_combinations, model_choice, csv_file):
     os.makedirs(output_dir, exist_ok=True)
 
     ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
@@ -19,27 +20,119 @@ def generate_yaml_files(output_dir, base_content, parameter_combinations, model_
 
     yaml_files = []
 
-    for idx, params in enumerate(parameter_combinations):
-        content = base_content.copy()
-        content['/**']['ros__parameters']['rock_structure_mesh'].update(params)
-        content['/**']['ros__parameters']['rock_structure_mesh']['mesh'] = mesh_path  # Set the correct mesh path
+    # Open the CSV file for writing
+    with open(csv_file, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        # Write the header (sim_no and parameters)
+        writer.writerow(['sim_no', 'restitution', 'lateralFriction', 'spinningFriction', 'contactDamping', 'contactStiffness'])
 
-        # Naming each YAML file sequentially
-        filename = f"{model_choice}_{idx}.yaml"
-        file_path = os.path.join(output_dir, filename)
+        for idx, params in enumerate(parameter_combinations):
+            content = base_content.copy()
+            content['/**']['ros__parameters']['rock_structure_mesh'].update(params)
+            content['/**']['ros__parameters']['rock_structure_mesh']['mesh'] = mesh_path  # Set the correct mesh path
 
-        # Check if the file already exists to avoid overwriting
-        if os.path.exists(file_path):
-            print(f"Duplicate found, skipping: {file_path}")
-            continue
+            # Naming each YAML file sequentially
+            filename = f"{model_choice}_{idx}.yaml"
+            file_path = os.path.join(output_dir, filename)
 
-        with open(file_path, 'w') as file:
-            yaml.safe_dump(content, file, default_flow_style=None, sort_keys=False, indent=2, width=120)
+            # Check if the file already exists to avoid overwriting
+            if os.path.exists(file_path):
+                print(f"Duplicate found, skipping: {file_path}")
+                continue
 
-        print(f'Generated: {file_path}')
-        yaml_files.append(file_path)
+            with open(file_path, 'w') as yaml_file:
+                yaml.safe_dump(content, yaml_file, default_flow_style=None, sort_keys=False, indent=2, width=120)
+
+            print(f'Generated: {file_path}')
+            yaml_files.append(file_path)
+
+            # Write the parameter values to the CSV file
+            writer.writerow([idx, params.get('restitution'), params.get('lateralFriction'), params.get('spinningFriction'), params.get('contactDamping'), params.get('contactStiffness')])
 
     return yaml_files
+
+
+def iterative_search(output_dir, base_content, model_choice, csv_file):
+    os.makedirs(output_dir, exist_ok=True)
+
+    ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
+
+    # Update the mesh path based on the model choice
+    if model_choice == 'sp1':
+        mesh_path = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet/models/SP1_PBRmodel/sp1.urdf')
+    elif model_choice == 'sp2':
+        mesh_path = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet/models/SP2_PBRmodel/sp2.urdf')
+    else:
+        mesh_path = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet/models/double_rock_pbr/pbr_mesh.urdf')
+
+    yaml_files = []
+
+    # Open the CSV file for writing
+    with open(csv_file, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        # Write the header (sim_no and parameters)
+        writer.writerow(['sim_no', 'restitution', 'lateralFriction', 'spinningFriction', 'contactDamping', 'contactStiffness'])
+
+        # Define base values for all parameters
+        base_params = {
+            'mesh': mesh_path,
+            'meshScale': [1.0, 1.0, 1.0],
+            'mass': 353.802,
+            'restitution': 0.30,
+            'lateralFriction': 0.50,
+            'spinningFriction': 0.10,
+            'contactDamping': 1e4,
+            'contactStiffness': 1e6,
+            'rock_position': [0.0, 0.0, 2.78]
+        }
+
+        # Define the ranges for each parameter
+        parameter_ranges = {
+            'restitution': [0.2, 0.4, 0.6, 0.8],
+            'lateralFriction': [0.01, 0.11, 0.21, 0.31, 0.41],
+            'spinningFriction': [0.01, 0.11, 0.21, 0.31, 0.41],
+            'contactDamping': [1e3, 1e4, 1e5, 1e6, 1e7],
+            'contactStiffness': [1e4, 1e5, 1e6, 1e7, 1e8]
+        }
+
+        # Initialize a counter for naming the files as sp1_0.yaml, sp1_1.yaml, sp1_2.yaml, etc.
+        file_counter = 0
+
+        # For each parameter, change only one value at a time, keeping others as their base value
+        for param, values in parameter_ranges.items():
+            for value in values:
+                # Start with the base values and update only the current parameter
+                current_params = base_params.copy()
+                current_params[param] = value
+
+                # Prepare the content for the YAML file
+                content = base_content.copy()
+                content['/**']['ros__parameters']['rock_structure_mesh'] = current_params.copy()
+
+                # Naming each YAML file sequentially, using the model_choice and counter
+                filename = f"{model_choice}_{file_counter}.yaml"
+                file_path = os.path.join(output_dir, filename)
+
+                # Check if the file already exists to avoid overwriting
+                if os.path.exists(file_path):
+                    print(f"Duplicate found, skipping: {file_path}")
+                    continue
+
+                # Save the YAML file with the full structure
+                with open(file_path, 'w') as yaml_file:
+                    yaml.safe_dump(content, yaml_file, default_flow_style=None, sort_keys=False, indent=2, width=120)
+
+                print(f'Generated: {file_path}')
+                yaml_files.append(file_path)
+
+                # Write the parameter values to the CSV file
+                writer.writerow([file_counter, current_params['restitution'], current_params['lateralFriction'], current_params['spinningFriction'], current_params['contactDamping'], current_params['contactStiffness']])
+
+                # Increment the counter for each file generated
+                file_counter += 1
+
+    return yaml_files
+
 
 def generate_launch_files(output_dir, yaml_files, model_choice):
     ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
@@ -95,7 +188,8 @@ def generate_launch_description():
             physics_parameters_path,
             vsr_structure_path,
             pbr_structure_path,
-            '{yaml_file}'
+            '{yaml_file}',
+            {{'recording_folder_name': LaunchConfiguration('recording_folder_name')}}
         ]
     )
 
@@ -133,83 +227,6 @@ def generate_launch_description():
 
     return launch_file_paths
 
-def generate_range(min_val, max_val, step):
-    """ Helper function to generate range based on min, max, and step values. """
-    return list(np.arange(min_val, max_val + step, step))
-
-def iterative_search(output_dir, base_content, model_choice):
-    os.makedirs(output_dir, exist_ok=True)
-
-    ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
-
-    # Update the mesh path based on the model choice
-    if model_choice == 'sp1':
-        mesh_path = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet/models/SP1_PBRmodel/sp1.urdf')
-    elif model_choice == 'sp2':
-        mesh_path = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet/models/SP2_PBRmodel/sp2.urdf')
-    else:
-        mesh_path = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet/models/double_rock_pbr/pbr_mesh.urdf')
-
-    yaml_files = []
-
-    # Define base values for all parameters
-    base_params = {
-        'mesh': mesh_path,
-        'meshScale': [1.0, 1.0, 1.0],
-        'mass': 353.802,
-        'restitution': 0.30,
-        'lateralFriction': 0.50,
-        'spinningFriction': 0.10,
-        'contactDamping': 1e4,
-        'contactStiffness': 1e6,
-        'rock_position': [0.0, 0.0, 2.78]
-    }
-
-    # Define the ranges for each parameter
-    parameter_ranges = {
-        'restitution': [0.2, 0.4, 0.6, 0.8],
-        'lateralFriction': [0.01, 0.11, 0.21, 0.31, 0.41],
-        'spinningFriction': [0.01, 0.11, 0.21, 0.31, 0.41],
-        'contactDamping': [1e3, 1e4, 1e5, 1e6, 1e7],
-        'contactStiffness': [1e4, 1e5, 1e6, 1e7, 1e8]
-    }
-
-    # Initialize a counter for naming the files as sp1_0.yaml, sp1_1.yaml, sp1_2.yaml, etc.
-    file_counter = 0
-
-    # For each parameter, change only one value at a time, keeping others as their base value
-    for param, values in parameter_ranges.items():
-        for value in values:
-            # Start with the base values and update only the current parameter
-            current_params = base_params.copy()
-            current_params[param] = value
-
-            # Prepare the content for the YAML file
-            content = base_content.copy()
-            content['/**']['ros__parameters']['rock_structure_mesh'] = current_params.copy()
-
-            # Naming each YAML file sequentially, using the model_choice and counter
-            filename = f"{model_choice}_{file_counter}.yaml"
-            file_path = os.path.join(output_dir, filename)
-
-            # Check if the file already exists to avoid overwriting
-            if os.path.exists(file_path):
-                print(f"Duplicate found, skipping: {file_path}")
-                continue
-
-            # Save the YAML file with the full structure
-            with open(file_path, 'w') as file:
-                yaml.safe_dump(content, file, default_flow_style=None, sort_keys=False, indent=2, width=120)
-
-            print(f'Generated: {file_path}')
-            yaml_files.append(file_path)
-
-            # Increment the counter for each file generated
-            file_counter += 1
-
-    return yaml_files
-
-
 
 def generate_master_launch_file(launch_files, output_dir, model_choice):
     master_launch_content = """
@@ -239,6 +256,7 @@ def generate_launch_description():
         file.write(master_launch_content)
     print(f'Generated master launch file: {master_launch_filename}')
 
+
 def main():
     base_yaml_content = {
         '/**': {
@@ -258,11 +276,12 @@ def main():
     }
 
     model_choice = input("Select a model (pbr_mesh, sp1, sp2): ").strip().lower()
-    generation_type = input("Choose generation type ('random' for random combinations, 'iterative' for iterative search): ").strip().lower()
+    generation_type = input("Choose generation type ('exhaustive' for exhaustive combinations, 'iterative' for iterative search): ").strip().lower()
 
     output_directory = os.path.join(os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws')),'src', 'virtual_shake_robot_pybullet/config')
+    csv_file = os.path.join(output_directory, 'simulation_parameters.csv')  # Path to the CSV file
 
-    if generation_type == 'random':
+    if generation_type == 'exhaustive':
         # Hardcoded ranges for the parameters
         restitution_range = [0.3, 0.4, 0.5]
         lateral_friction_range = [0.3, 0.5]
@@ -276,10 +295,10 @@ def main():
             for r, lf, sf, cd, cs in itertools.product(restitution_range, lateral_friction_range, spinning_friction_range, contact_damping_range, contact_stiffness_range)
         ]
 
-        yaml_files = generate_yaml_files(output_directory, base_yaml_content, parameter_combinations, model_choice)
+        yaml_files = generate_yaml_files(output_directory, base_yaml_content, parameter_combinations, model_choice, csv_file)
     
     elif generation_type == 'iterative':
-        yaml_files = iterative_search(output_directory, base_yaml_content,model_choice)
+        yaml_files = iterative_search(output_directory, base_yaml_content, model_choice, csv_file)
 
     else:
         print("Invalid option selected. Exiting.")
@@ -288,6 +307,7 @@ def main():
     launch_files = generate_launch_files(os.path.join(os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws')), 'src','virtual_shake_robot_pybullet/launch'), yaml_files, model_choice)
 
     generate_master_launch_file(launch_files, os.path.join(os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws')), 'src','virtual_shake_robot_pybullet/launch'), model_choice)
+
 
 if __name__ == "__main__":
     main()

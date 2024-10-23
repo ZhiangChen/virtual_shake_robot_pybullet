@@ -184,7 +184,10 @@ recordings_gui_off/
 recordings_gui_off_rtf_off/
 recordings_realtime_off/
 recordings_rtf_on_gui_on/
-
+recordings/
+src/example.py
+src/example_2.py
+src/test.py
 
 # Ignore all generated launch files with numeric suffix (e.g., sp1_0.launch.py to sp1_95.launch.py)
 launch/sp1_*.launch.py

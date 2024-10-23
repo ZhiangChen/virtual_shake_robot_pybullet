@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import csv
 import pybullet as p
 import time
 import rclpy
@@ -16,7 +16,7 @@ from geometry_msgs.msg import PoseStamped
 import transforms3d.euler as euler
 import threading
 from rclpy.executors import MultiThreadedExecutor
-from data_loader import DataLoader
+from utils.data_loader import DataLoader
 import os
 from ament_index_python.packages import get_package_share_directory
 import argparse
@@ -36,7 +36,7 @@ class ControlNode(Node):
         """
         super().__init__('control_node')
         self.new_pose_received = False
-        self.enable_plotting = self.declare_parameter('enable_plotting', False).value
+        self.enable_plotting = self.declare_parameter('enable_plotting', True).value
         self.time_step = self.declare_parameter('engineSettings.timeStep', 0.001).value
         self.response_wait_time = self.declare_parameter('engineSettings.response_wait_time', 5.0).value
         self.loading_wait_time = self.declare_parameter('engineSettings.loading_wait_time', 5.0).value
@@ -46,6 +46,9 @@ class ControlNode(Node):
         self._displacement_action_client = ActionClient(self, LoadDispl, 'load_displ_action')
 
         self.ready_publisher = self.create_publisher(Bool, 'control_node_ready', 10)
+        self.live_fig = None
+        self.live_ax = None
+        self.live_toppling_data = []
         self._action_server = ActionServer(
             self,
             AF,
@@ -117,8 +120,7 @@ class ControlNode(Node):
         elif self.motion_mode == 'all_recordings':
             self.run_all_recording_experiments()
         
-        # self.declare_parameter('enable_plotting', False)  
-        # self.enable_plotting = self.get_parameter('enable_plotting').value
+  
 
     def run_single_recording_experiment(self, test_no):
         """
@@ -185,6 +187,65 @@ class ControlNode(Node):
             self.get_logger().error(f"Test data for Test No: {test_no} not found!")
             return False
 
+
+    def update_live_plot(self, pga, pgv_to_pga, toppled):
+        """
+        Updates the live plot of PGA_g vs PGV/PGA with the new data point.
+        Args:
+            pga (float): The peak ground acceleration.
+            pgv_to_pga (float): The ratio of PGV to PGA.
+            toppled (bool): Whether the rock has toppled or not.
+        """
+        if not self.enable_plotting:
+            self.get_logger().info("Plotting is disabled.")
+            return
+
+        # Calculate PGA_g
+        PGA_g = pga / 9.807
+
+        # Append the data point to self.live_toppling_data
+        self.live_toppling_data.append((PGA_g, pgv_to_pga, toppled))
+
+        # Prepare data for plotting
+        toppled_data = [(x, y) for x, y, t in self.live_toppling_data if t]
+        not_toppled_data = [(x, y) for x, y, t in self.live_toppling_data if not t]
+
+        # Initialize figure and axis if not already done
+        if self.live_fig is None or self.live_ax is None:
+            plt.ion()  # Enable interactive mode
+            self.live_fig, self.live_ax = plt.subplots(figsize=(10, 5))
+            self.live_ax.set_xlabel('PGA_g')
+            self.live_ax.set_ylabel('PGV / PGA')
+            self.live_ax.set_title('Toppling Status')
+            self.live_ax.grid(True)
+            plt.show(block=False)
+
+        # Clear the axes for updating
+        self.live_ax.cla()
+        self.live_ax.set_xlabel('PGA_g')
+        self.live_ax.set_ylabel('PGV / PGA')
+        self.live_ax.set_title('Toppling Status')
+        self.live_ax.grid(True)
+
+        # Plot data points
+        if not_toppled_data:
+            x_vals, y_vals = zip(*not_toppled_data)
+            self.live_ax.scatter(x_vals, y_vals, c='b', marker='v', label='Not Toppled')
+        if toppled_data:
+            x_vals, y_vals = zip(*toppled_data)
+            self.live_ax.scatter(x_vals, y_vals, c='r', label='Toppled')
+
+        # Update legend without duplicates
+        handles, labels = self.live_ax.get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        self.live_ax.legend(by_label.values(), by_label.keys(), loc='upper right')
+
+        # Refresh the plot
+        self.live_fig.canvas.draw()
+        self.live_fig.canvas.flush_events()
+
+        self.get_logger().info("Live plot updated.")
+
     def pbr_pose_callback(self, msg):
         """
         Callback to handle the latest pose of the PBR, updating the internal state.
@@ -226,6 +287,10 @@ class ControlNode(Node):
         Returns:
             None
         """
+        sim_no = self.get_namespace().replace('/', '')
+         # Define the file path using the cleaned sim_no
+        csv_file_path = f'/home/akshay/ros2_ws/src/virtual_shake_robot_pybullet/data/toppling_status_{sim_no}.csv'
+        topple_status_array =  []
         for test_no in range(11, 705):  # Test numbers from 011 to 705
             self.get_logger().info(f"Starting experiment on Test No: {test_no}")
 
@@ -255,13 +320,17 @@ class ControlNode(Node):
                 if self.latest_pose:
                     self.get_logger().info(f"Processing pose for Test No: {test_no}: {self.latest_pose}")
                     toppled = self.check_Toppled(self.latest_pose)
-                    self.plot_pgv_pga(pga, pgv_to_pga, toppled)
+                    self.update_live_plot(pga, pgv_to_pga, toppled)
+                    # self.plot_pgv_pga(pga, pgv_to_pga, toppled)
                     if toppled:
                         self.get_logger().info("The Rock has toppled.")
+                        topple_status_array.append(1)
                     else:
                         self.get_logger().info("The rock has not toppled.")
+                        topple_status_array.append(0)
                 else:
                     self.get_logger().warning(f"No pose received for Test No: {test_no} after waiting.")
+                    topple_status_array.append(0)
             else:
                 self.get_logger().error(f"Experiment on Test No: {test_no} failed or was not completed.")
 
@@ -276,6 +345,29 @@ class ControlNode(Node):
             self.rock_id = 2
 
             rclpy.spin_once(self, timeout_sec=0.001)
+
+        # After all tests, save toppling status to CSV
+        self.save_toppling_status_to_csv(topple_status_array, csv_file_path)
+
+  
+
+    def save_toppling_status_to_csv(self, topple_status_array,csv_file_path):
+        """
+        Save the toppling status array to a CSV file.
+
+        Args:
+            topple_status_array (list): List of toppling statuses for each test.
+        """
+        
+        # Open the file in write mode and save the toppling status
+        with open(csv_file_path, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(['Test No', 'Toppling Status'])
+            for i, status in enumerate(topple_status_array, start=1):  # Assuming test_no starts from 1
+                writer.writerow([i, status])  # Write test number and corresponding toppling status
+        
+        self.get_logger().info(f"Toppling status saved to {csv_file_path}")
+        
     def plot_pgv_pga(self, pga, pgv_to_pga, toppled):
         """
         Plots the PGV vs PGA data, updating the visualization with toppling status.
