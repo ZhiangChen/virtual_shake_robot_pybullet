@@ -94,19 +94,16 @@ class SimulationNode(Node):
         # Manage model service
         self._manage_model_service = self.create_service(ManageModel, 'manage_model', self.manage_model_callback)
 
-
-
-        #adding a realtime_flag to control the time_sleep
-        self.declare_parameter('realtime_flag', True)
-
-        self.realtime_flag = self.get_parameter('realtime_flag').value
-        self.declare_parameter('enable_plotting', False)  # Declare as a ROS2 parameter
-        self.enable_plotting = self.get_parameter('enable_plotting').value
+        
         
         #Declare parameters
         self.declare_parameters(
             namespace="",
             parameters=[
+
+                ('simSettings.realtime_flag', rclpy.Parameter.Type.BOOL),
+                ('simSettings.use_gui', rclpy.Parameter.Type.BOOL),
+                ('simSettings.enable_plotting', rclpy.Parameter.Type.BOOL),
                 ('engineSettings.loading_wait_time', rclpy.Parameter.Type.DOUBLE),
                 ('engineSettings.gravity', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('engineSettings.timeStep', rclpy.Parameter.Type.DOUBLE),
@@ -224,19 +221,22 @@ class SimulationNode(Node):
 
         }
 
+        self.realtime_flag = self.get_parameter('simSettings.realtime_flag').value
+        self.use_gui = self.get_parameter('simSettings.use_gui').value
+        self.enable_plotting = self.get_parameter('simSettings.enable_plotting').value
 
-   
-        self.client_id = self.server_connection()
-
+        self.client_id = self.server_connection(self.use_gui)
 
         self.ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
         self.rock_id = None
 
         self.setup_simulation()
         self.create_robot()
+        self.declare_parameter('recording_folder_name', 'default_folder')
+        self.recordings_folder = self.get_recording_folder_name()
         
 
-    def server_connection(self, use_gui=True):
+    def server_connection(self, use_gui):
         """
         Establishes a connection to the PyBullet server with an optional GUI.
 
@@ -647,6 +647,21 @@ class SimulationNode(Node):
             goal_handle.abort()
             return LoadPBR.Result(success=False)
         
+    def get_recording_folder_name(self):
+        """Retrieves the folder name from a parameter."""
+        folder_name = self.get_parameter('recording_folder_name').value
+        self.get_logger().info("The recording folder executed")
+        if not folder_name:
+            self.get_logger().error("Recording folder name is not provided.")
+            raise ValueError("Recording folder name is required.")
+            
+        ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
+        recordings_folder = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet', 'recordings', folder_name)
+        os.makedirs(recordings_folder, exist_ok=True)
+        return recordings_folder
+
+
+        
     def execute_position_trajectory_callback(self, goal_handle):
         """
         Executes the trajectory based on the positions and timestamps provided in the LoadDispl action goal.
@@ -753,17 +768,13 @@ class SimulationNode(Node):
             feedback_msg.current_timestamp = timestamps[i]
             goal_handle.publish_feedback(feedback_msg)
 
-        # After the loop, save the simulation data to a numpy file
-        ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
-        recordings_folder = os.path.join(ros2_ws,'src' ,'virtual_shake_robot_pybullet', 'recordings_gui_off_rtf_off')
-        os.makedirs(recordings_folder, exist_ok=True)
-
+    
         full_namespace = self.get_namespace()
         sim_no = full_namespace.split('/')[1]
 
         # Generate a unique file name with test_no and namespace
         file_name = f"trajectory_{sim_no}_test_{int(test_no)}.npy"
-        file_path = os.path.join(recordings_folder, file_name)
+        file_path = os.path.join(self.recordings_folder, file_name)
 
         # Save the simulation data to a numpy file (timestamps, target_positions, actual_positions, pbr_poses)
         self.get_logger().info(f"Length of the .npy file(before): {len(simulation_data)}")
@@ -906,7 +917,7 @@ class SimulationNode(Node):
 
         # After the loop, save the simulation data to a numpy file
         ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
-        recordings_folder = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet', 'recordings_grid_cosine')
+        recordings_folder = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet', 'recordings', 'recordings_grid_cosine')
         os.makedirs(recordings_folder, exist_ok=True)
 
         
