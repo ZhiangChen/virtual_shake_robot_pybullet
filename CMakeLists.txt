@@ -41,9 +41,9 @@ install(PROGRAMS
   src/simulation_node.py
   src/control_node.py
   src/pulse_motion_client.py
-  src/pbr_loader.py
+  src/utils/pbr_loader.py
   src/data_loader.py
-  src/script_generator.py
+  src/utils/script_generator.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

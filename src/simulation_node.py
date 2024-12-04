@@ -103,7 +103,7 @@ class SimulationNode(Node):
 
                 ('simSettings.realtime_flag', rclpy.Parameter.Type.BOOL),
                 ('simSettings.use_gui', rclpy.Parameter.Type.BOOL),
-                ('simSettings.enable_plotting', rclpy.Parameter.Type.BOOL),
+                ('simSettings.enable_plotting', rclpy.Parameter.Type.BOOL), 
                 ('engineSettings.loading_wait_time', rclpy.Parameter.Type.DOUBLE),
                 ('engineSettings.gravity', rclpy.Parameter.Type.DOUBLE_ARRAY),
                 ('engineSettings.timeStep', rclpy.Parameter.Type.DOUBLE),

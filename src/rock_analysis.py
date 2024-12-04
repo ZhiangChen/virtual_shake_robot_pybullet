@@ -9,14 +9,24 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 import tkinter as tk
 from pandastable import Table
 
+
 class TopplingAnalysis:
     def __init__(self):
-        self.combined_pickle_path = '/home/akshay/ros2_ws/src/virtual_shake_robot_pybullet/data/combined_data.pkl'
-        self.npy_folder_path = '/home/akshay/ros2_ws/src/virtual_shake_robot_pybullet/recordings/'
-        self.ground_truth_path = '/home/akshay/ros2_ws/src/virtual_shake_robot_pybullet/data/Results_Granite.xlsx'
-        self.simulation_data_path = '/home/akshay/ros2_ws/src/virtual_shake_robot_pybullet/data/'
-        self.simulation_parameters_path = '/home/akshay/ros2_ws/src/virtual_shake_robot_pybullet/config/simulation_parameters.csv'
+        # Dynamically resolve paths based on the workspace
+        ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
+        package_share_directory = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet')
+
+        # Set relative paths
+        self.combined_pickle_path = os.path.join(package_share_directory, 'data', 'real_experiments_combined_data.pkl')
+        self.npy_folder_path = os.path.join(package_share_directory, 'recordings', 'iterative_test_lat')
+        self.ground_truth_path = os.path.join(package_share_directory, 'data', 'Results_Granite.xlsx')
+        self.simulation_data_path = os.path.join(package_share_directory, 'data')
+        self.simulation_parameters_path = os.path.join(package_share_directory, 'config', 'iteration_results_restitution.csv')
+
+        # Ensure the simulation data path exists
         os.makedirs(self.simulation_data_path, exist_ok=True)
+
+        # Load data
         self.combined_data = self._load_combined_data()
         self.ground_truth_data = self._load_ground_truth_data()
 
@@ -113,31 +123,24 @@ class TopplingAnalysis:
         # Load simulation parameters and merge with metrics
         if os.path.exists(self.simulation_parameters_path):
             parameters_df = pd.read_csv(self.simulation_parameters_path)
-            # Ensure the 'Simulation' and 'sim_no' columns are of the same type (string)
             parameters_df['Simulation'] = parameters_df['sim_no'].astype(str)
-            # Merge the metrics DataFrame with the parameters DataFrame
             metrics_df = pd.DataFrame(metrics_list)
-            merged_metrics_df = pd.merge(parameters_df,metrics_df, on='Simulation', how='left')
-            # Remove the duplicate 'sim_no' column
+            merged_metrics_df = pd.merge(parameters_df, metrics_df, on='Simulation', how='left')
             merged_metrics_df = merged_metrics_df.drop(columns=['Simulation'])
-            # Save the merged metrics table as CSV
             metrics_csv_file_path = os.path.join(self.simulation_data_path, 'simulation_metrics.csv')
             merged_metrics_df.to_csv(metrics_csv_file_path, index=False)
             print(f"Saved metrics CSV file: {metrics_csv_file_path}")
-            # Display the merged metrics DataFrame
             self.display_dataframe(merged_metrics_df)
         else:
             print(f"Simulation parameters CSV file not found: {self.simulation_parameters_path}")
-            # Display the original metrics DataFrame
             metrics_df = pd.DataFrame(metrics_list)
             self.display_dataframe(metrics_df)
-            # Save the metrics table as CSV
             metrics_csv_file_path = os.path.join(self.simulation_data_path, 'simulation_metrics.csv')
             metrics_df.to_csv(metrics_csv_file_path, index=False)
             print(f"Saved metrics CSV file: {metrics_csv_file_path}")
 
         # Determine the best simulation number based on accuracy
-        best_sim_no = metrics_df.loc[metrics_df['F1 Score'].idxmax(), 'Simulation']
+        best_sim_no = metrics_df.loc[metrics_df['Recall'].idxmax(), 'Simulation']
         self.plot_graph(best_sim_no)
         self.plot_graph_analysis(best_sim_no)
 
@@ -182,12 +185,12 @@ class TopplingAnalysis:
         plt.figure(figsize=(8, 6))
         plt.scatter(x_vals_non_overturned, y_vals_non_overturned, color='black', alpha=0.8, label='No Overturn')
         plt.scatter(x_vals_overturned, y_vals_overturned, color='lightgray', alpha=0.8, label='Overturn')
-        plt.xlabel("Scaled PGA (g)",fontsize=12, weight='bold')
-        plt.ylabel("PGV/PGA (s)",fontsize=12, weight='bold')
-        plt.title(f"(A) Overturn vs No Overturn - Best Simulation {best_sim_no}",fontsize=14, weight='bold')
-        plt.xlim(0, 1)  # Set the x-axis limits to match the ground truth plot
-        plt.ylim(0, 0.3)  # Set the y-axis limits to match the ground truth plot
-        plt.legend( loc='upper right',fontsize=10, frameon=False)
+        plt.xlabel("Scaled PGA (g)", fontsize=12, weight='bold')
+        plt.ylabel("PGV/PGA (s)", fontsize=12, weight='bold')
+        plt.title(f"(A) Overturn vs No Overturn - Best Simulation {best_sim_no}", fontsize=14, weight='bold')
+        plt.xlim(0, 1)
+        plt.ylim(0, 0.3)
+        plt.legend(loc='upper right', fontsize=10, frameon=False)
         plt.grid()
         plt.show()
 
@@ -254,8 +257,64 @@ class TopplingAnalysis:
 
         # Show plot
         plt.show()
+    
+    def plot_analysis_with_best_or_specific_simulation(self, sim_no=None):
+        """
+        Plots the simulation data for either the best simulation (based on Recall) or a specific simulation number.
+
+        :param sim_no: Optional. Specific simulation number to plot. If None, uses the best simulation based on Recall.
+        """
+        metrics_csv_file_path = os.path.join(self.simulation_data_path, 'simulation_metrics.csv')
+
+        if not os.path.exists(metrics_csv_file_path):
+            print(f"Metrics CSV file not found: {metrics_csv_file_path}")
+            return
+
+        metrics_df = pd.read_csv(metrics_csv_file_path)
+
+        if sim_no is None:
+            # Determine the best simulation number based on Recall
+            sim_no = metrics_df.loc[metrics_df['Recall'].idxmax(), 'Simulation']
+            print(f"Best simulation number based on Recall: {sim_no}")
+
+        sim_data = self._load_simulation_csv(sim_no)
+        if sim_data is None:
+            print(f"Simulation data for Simulation {sim_no} not found.")
+            return
+
+        x_vals_overturned = []
+        y_vals_overturned = []
+        x_vals_non_overturned = []
+        y_vals_non_overturned = []
+
+        for _, row in sim_data.iterrows():
+            pga = row['Scaled PGA']
+            pgv_pga = row['PGV/PGA']
+            toppling_status = row['Toppling Status']
+
+            if toppling_status == 1:  # Overturned
+                x_vals_overturned.append(pga)
+                y_vals_overturned.append(pgv_pga)
+            else:  # Not overturned
+                x_vals_non_overturned.append(pga)
+                y_vals_non_overturned.append(pgv_pga)
+
+        # Plot data
+        plt.figure(figsize=(8, 6))
+        plt.scatter(x_vals_non_overturned, y_vals_non_overturned, color='black', alpha=0.8, label='No Overturn')
+        plt.scatter(x_vals_overturned, y_vals_overturned, color='lightgray', alpha=0.8, label='Overturn')
+        plt.xlabel("Scaled PGA (g)", fontsize=12, weight='bold')
+        plt.ylabel("PGV/PGA (s)", fontsize=12, weight='bold')
+        plt.title(f"Simulation Results - Simulation {sim_no}", fontsize=14, weight='bold')
+        plt.xlim(0, 1)
+        plt.ylim(0, 0.3)
+        plt.legend(loc='upper right', fontsize=10, frameon=False)
+        plt.grid()
+        plt.show()
+
 
 # Command-line argument handling
 if __name__ == '__main__':
     analysis = TopplingAnalysis()
     analysis.analyze_all_simulations()
+    analysis.plot_analysis_with_best_or_specific_simulation(sim_no=10)

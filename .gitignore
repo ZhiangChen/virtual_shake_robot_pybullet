@@ -187,7 +187,11 @@ recordings_rtf_on_gui_on/
 recordings/
 src/example.py
 src/example_2.py
+src/example_3.py
+src/example_4.py
 src/test.py
+
+data/sp1_*.yaml
 
 # Ignore all generated launch files with numeric suffix (e.g., sp1_0.launch.py to sp1_95.launch.py)
 launch/sp1_*.launch.py
