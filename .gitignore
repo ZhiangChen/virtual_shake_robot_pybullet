@@ -171,6 +171,7 @@ cython_debug/
 build/
 install/
 log/
+.vscode/
 .vscode/settings.json
 launch/install
 launch/log
@@ -207,3 +208,17 @@ launch/pbr_mesh_*.launch.py
 
 launch/sp1_*.yaml
 
+data/simulation_*.csv
+data/simulation_metrics.csv
+data/toppling_status_sim_*sim*.csv
+data/optimization_results.xlsx
+data/iteration_results_lateralFriction.csv
+data/iteration_results_restitution.csv
+data/combined_simulation_data.csv
+data/Results_Granite.xlsx
+data/PGV_PGA_Results.csv
+data/PGVA_Error_Comparison.csv
+data/manual_metrics_results.csv
+data/MaterialAndWeight.txt
+data/.~lock.PGVA_Error_Comparison.csv#
+data/combined_simulation_data.csv
