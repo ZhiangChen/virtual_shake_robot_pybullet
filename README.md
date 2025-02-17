@@ -253,6 +253,11 @@ parameters yields us the highest accuracy when compared with the actual experime
 All the details about how the experiments  are conducted and the comparisons are done are in the 
 [Iterative_Experiments](docs/Iterative_experiments.md)
 
+Additonally we wanted to maximize the accuracy so we did iterative optimisation on the parameter set to find the best pair of the parameters.
+
+Details about the script and results are in the [Iterative_Optimisation](docs/iterative_optimisation.md)
+
+
 
 
 

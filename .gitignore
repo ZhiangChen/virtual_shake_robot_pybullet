@@ -171,6 +171,7 @@ cython_debug/
 build/
 install/
 log/
+.vscode/
 .vscode/settings.json
 launch/install
 launch/log
@@ -187,7 +188,11 @@ recordings_rtf_on_gui_on/
 recordings/
 src/example.py
 src/example_2.py
+src/example_3.py
+src/example_4.py
 src/test.py
+
+data/sp1_*.yaml
 
 # Ignore all generated launch files with numeric suffix (e.g., sp1_0.launch.py to sp1_95.launch.py)
 launch/sp1_*.launch.py
@@ -203,3 +208,17 @@ launch/pbr_mesh_*.launch.py
 
 launch/sp1_*.yaml
 
+data/simulation_*.csv
+data/simulation_metrics.csv
+data/toppling_status_sim_*sim*.csv
+data/optimization_results.xlsx
+data/iteration_results_lateralFriction.csv
+data/iteration_results_restitution.csv
+data/combined_simulation_data.csv
+data/Results_Granite.xlsx
+data/PGV_PGA_Results.csv
+data/PGVA_Error_Comparison.csv
+data/manual_metrics_results.csv
+data/MaterialAndWeight.txt
+data/.~lock.PGVA_Error_Comparison.csv#
+data/combined_simulation_data.csv

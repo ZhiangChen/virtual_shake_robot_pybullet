@@ -2,6 +2,7 @@
 import csv
 import pybullet as p
 import time
+import yaml
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionServer, ActionClient
@@ -16,7 +17,7 @@ from geometry_msgs.msg import PoseStamped
 import transforms3d.euler as euler
 import threading
 from rclpy.executors import MultiThreadedExecutor
-from utils.data_loader import DataLoader
+from data_loader import DataLoader
 import os
 from ament_index_python.packages import get_package_share_directory
 import argparse
@@ -36,19 +37,27 @@ class ControlNode(Node):
         """
         super().__init__('control_node')
         self.new_pose_received = False
-        self.enable_plotting = self.declare_parameter('enable_plotting', True).value
+        self.enable_plotting = self.declare_parameter('enable_plotting', False).value
         self.time_step = self.declare_parameter('engineSettings.timeStep', 0.001).value
         self.response_wait_time = self.declare_parameter('engineSettings.response_wait_time', 5.0).value
         self.loading_wait_time = self.declare_parameter('engineSettings.loading_wait_time', 5.0).value
         self.control_frequency = 1.0 / self.time_step
+
+        # Action clients
         self._trajectory_action_client = ActionClient(self, TrajectoryAction, 'trajectory_action')
         self._recording_action_client = ActionClient(self, RecordingAction, 'manage_recording')
         self._displacement_action_client = ActionClient(self, LoadDispl, 'load_displ_action')
 
+        # Publishers and Subscribers
         self.ready_publisher = self.create_publisher(Bool, 'control_node_ready', 10)
+        self.create_subscription(PoseStamped, 'pbr_pose_topic', self.pbr_pose_callback, 10)
+
+        # Live plotting variables
         self.live_fig = None
         self.live_ax = None
         self.live_toppling_data = []
+
+        # Action server for manual amplitude-frequency setting
         self._action_server = ActionServer(
             self,
             AF,
@@ -56,31 +65,7 @@ class ControlNode(Node):
             self.run_single_cosine_experiment
         )
 
-        # Get the package share directory
-        ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
-
-        # Construct the paths relative to the workspace
-        excel_file_path = os.path.join(ros2_ws, 'src','virtual_shake_robot_pybullet', 'data', 'Shake_Table_Response', 'Earthquake_Records_Info.xlsx')
-        folder_path = os.path.join(ros2_ws, 'src','virtual_shake_robot_pybullet', 'data', 'Shake_Table_Response')
-        pickle_file_path = os.path.join(ros2_ws,'src','virtual_shake_robot_pybullet', 'data', 'combined_data.pkl')
-
-        # Optionally print the paths for debugging
-        self.get_logger().info(f"Excel file path: {excel_file_path}")
-        self.get_logger().info(f"Folder path: {folder_path}")
-        self.get_logger().info(f"Pickle file path: {pickle_file_path}")
-
-        # Initialize the DataLoader and load the data
-        self.data_loader = DataLoader(
-            excel_file_path=excel_file_path,
-            folder_path=folder_path,
-            pickle_file_path=pickle_file_path
-        )
-
-        self.combined_data = self.data_loader.get_combined_data()
-
-        self._manage_model_client = self.create_client(ManageModel, 'manage_model')
-
-        self.get_logger().info("ControlNode initialized and action servers started.")
+        # Initialize some defaults
         self.robot_id = 1
         self.rock_id = None
         self.current_position = 0.0
@@ -91,24 +76,66 @@ class ControlNode(Node):
         self.latest_pose = None
         self.experiment_thread = None
         self.toppling_data = []
-
         self.amplitude_list = []
         self.frequency_list = []
         self.current_index = 0
-
         self.pedestal_reset_time = self.declare_parameter('simulation_node.engineSettings.pedestal_reset_time', 1.0).value
 
         # Publishers for PGA and PGV
         self.pga_publisher = self.create_publisher(Float64, 'pga_topic', 10)
         self.pgv_publisher = self.create_publisher(Float64, 'pgv_topic', 10)
 
-        # Subscriber for the pose topic
-        self.create_subscription(PoseStamped, 'pbr_pose_topic', self.pbr_pose_callback, 10)
-
+        # Motion mode and test_no parameters
         self.motion_mode = self.declare_parameter('motion_mode', '').value
         self.test_no = self.declare_parameter('test_no', Parameter.Type.INTEGER, None).value
 
+        # We only create the manage_model client here. We may or may not use it depending on the mode.
+        self._manage_model_client = self.create_client(ManageModel, 'manage_model')
+
+        # The following steps load YAML and DataLoader only if needed.
+        if self.motion_mode in ['single_recording', 'all_recordings']:
+            # Get the package share directory
+            ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
+            config_path = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet', 'config', 'data_path.yaml')
+
+            with open(config_path, 'r') as file:
+                config = yaml.safe_load(file)
+
+            if not config['file_paths']['excel_file_path'] or not config['file_paths']['folder_path'] or not config['file_paths']['pickle_file_path']:
+                raise ValueError("One or more paths in the configuration file are empty.")
+                    
+            # Retrieve file paths from the configuration
+            excel_file_path = os.path.join(ros2_ws, config['file_paths']['excel_file_path'])
+            folder_path = os.path.join(ros2_ws, config['file_paths']['folder_path'])
+            pickle_file_path = os.path.join(ros2_ws, config['file_paths']['pickle_file_path'])
+
+            # Validate file paths
+            if not os.path.exists(excel_file_path) or not os.path.exists(folder_path):
+                raise FileNotFoundError("One or more paths specified in the YAML configuration file are invalid.")
+
+            # Optionally print the paths for debugging
+            self.get_logger().info(f"Excel file path: {excel_file_path}")
+            self.get_logger().info(f"Folder path: {folder_path}")
+            self.get_logger().info(f"Pickle file path: {pickle_file_path}")
+
+            # Initialize the DataLoader and load the data
+            self.data_loader = DataLoader(
+                excel_file_path=excel_file_path,
+                folder_path=folder_path,
+                pickle_file_path=pickle_file_path
+            )
+
+            self.combined_data = self.data_loader.get_combined_data()
+        else:
+            # For other modes, no data loading is required
+            self.data_loader = None
+            self.combined_data = None
+
+        self.get_logger().info("ControlNode initialized and action servers started.")
+
+        # Now handle the selected motion mode
         if self.motion_mode == 'single_cosine':
+            # Run single cosine experiment or just wait for manual AF action
             pass
         elif self.motion_mode == 'grid_cosine':
             self.run_grid_cosine_experiment()
@@ -120,8 +147,7 @@ class ControlNode(Node):
         elif self.motion_mode == 'all_recordings':
             self.run_all_recording_experiments()
         
-  
-
+        
     def run_single_recording_experiment(self, test_no):
         """
         Executes a single recording experiment by sending displacement data for a specific test_no to the simulation node.
@@ -279,28 +305,44 @@ class ControlNode(Node):
         for pair in FA_data:
             print("Frequency: {:.2f}, Amplitude: {:.6f}".format(pair[0], pair[1])) 
         return np.asarray(FA_data)
-
+    
     def run_all_recording_experiments(self):
         """
-        Runs recording experiments for all test numbers, handling pose updates and toppling status.
+        Runs recording experiments for all test numbers dynamically found from the combined data,
+        handling pose updates and toppling status.
 
         Returns:
             None
         """
+        # Get the workspace src directory dynamically
+        ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
+        src_directory = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet', 'data')
+
+        # Define the file path using the simulation namespace
         sim_no = self.get_namespace().replace('/', '')
-         # Define the file path using the cleaned sim_no
-        csv_file_path = f'/home/akshay/ros2_ws/src/virtual_shake_robot_pybullet/data/toppling_status_{sim_no}.csv'
-        topple_status_array =  []
-        for test_no in range(11, 705):  # Test numbers from 011 to 705
+        csv_file_path = os.path.join(src_directory, f'toppling_status_{sim_no}.csv')
+
+        self.get_logger().info(f"Saving the CSV file at: {csv_file_path}")
+        topple_status_array = []
+
+        # Dynamically find all the test numbers in the combined data
+        test_numbers = sorted(self.combined_data.keys())
+        self.get_logger().info(f"Found {len(test_numbers)} test numbers: {test_numbers}")
+
+        for test_no in test_numbers:
             self.get_logger().info(f"Starting experiment on Test No: {test_no}")
 
             # Extract PGV, PGA, and PGV/PGA for the current test
             if test_no in self.combined_data:
                 test_data = self.combined_data[test_no]
-                pgv_to_pga = test_data['PGV/PGA']
-                pga = test_data['Scaled PGA']
+                pgv_to_pga = test_data.get('PGV/PGA', None)
+                pga = test_data.get('Scaled PGA', None)
 
-                self.get_logger().info(f"Started recording for Test No: {test_no} with PGA: {pga}, PGV/PGA: {pgv_to_pga}, and Test No: {test_no}")
+                if pgv_to_pga is None or pga is None:
+                    self.get_logger().warning(f"Missing data for Test No: {test_no}. Skipping this test.")
+                    continue
+
+                self.get_logger().info(f"Started recording for Test No: {test_no} with PGA: {pga}, PGV/PGA: {pgv_to_pga}")
             else:
                 self.get_logger().error(f"No data available for Test No: {test_no}. Skipping this test.")
                 continue
@@ -321,7 +363,6 @@ class ControlNode(Node):
                     self.get_logger().info(f"Processing pose for Test No: {test_no}: {self.latest_pose}")
                     toppled = self.check_Toppled(self.latest_pose)
                     self.update_live_plot(pga, pgv_to_pga, toppled)
-                    # self.plot_pgv_pga(pga, pgv_to_pga, toppled)
                     if toppled:
                         self.get_logger().info("The Rock has toppled.")
                         topple_status_array.append(1)
@@ -334,11 +375,8 @@ class ControlNode(Node):
             else:
                 self.get_logger().error(f"Experiment on Test No: {test_no} failed or was not completed.")
 
-            # self.send_recording_goal('stop', pga, pgv_to_pga, test_no)
-            self.get_logger().info(f"Stopped recording for Test No: {test_no}.")
-
             self.get_logger().info(f"Completed Test No: {test_no}. Moving to the next test.")
-            
+
             # Delete and respawn the model for the next test
             self.reset_model_postion_and_orientation()
 
@@ -348,6 +386,7 @@ class ControlNode(Node):
 
         # After all tests, save toppling status to CSV
         self.save_toppling_status_to_csv(topple_status_array, csv_file_path)
+
 
   
 

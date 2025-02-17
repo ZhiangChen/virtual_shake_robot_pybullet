@@ -162,7 +162,7 @@ def main():
     # Construct the paths relative to the workspace
     excel_file_path = os.path.join(ros2_ws,'src', 'virtual_shake_robot_pybullet', 'data', 'Shake_Table_Response', 'Earthquake_Records_Info.xlsx')
     folder_path = os.path.join(ros2_ws,'src', 'virtual_shake_robot_pybullet', 'data', 'Shake_Table_Response')
-    pickle_file_path = os.path.join(ros2_ws,'src', 'virtual_shake_robot_pybullet', 'data', 'combined_data.pkl')
+    pickle_file_path = os.path.join(ros2_ws,'src', 'virtual_shake_robot_pybullet', 'data', 'real_experiments_combined_data.pkl')
 
     # Initialize the DataLoader
     data_loader = DataLoader(

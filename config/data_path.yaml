@@ -1,0 +1,4 @@
+file_paths:
+  excel_file_path: "src/virtual_shake_robot_pybullet/data/Shake_Table_Response/Earthquake_Records_Info.xlsx"
+  folder_path: "src/virtual_shake_robot_pybullet/data/Shake_Table_Response"
+  pickle_file_path: "src/virtual_shake_robot_pybullet/data/real_experiments_combined_data.pkl"
