@@ -1,28 +1,37 @@
 <?xml version="1.0"?>
 <robot name="sp1_robot">
   <link name="base_link">
+
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="353.00"/> <!-- Mass in kilograms -->
-      <inertia ixx="2.61580915" ixy="-0.71203197" ixz="0.1928733"
-              iyy="1.93505054" iyz="0.10294264"
-              izz="2.27268579"/> <!-- Moments of inertia in kg*m^2 -->
+      <mass value="353.00"/>
+      <inertia
+        ixx="11.032465" ixy="0.0" ixz="0.0"
+        iyy="17.604068" iyz="0.0"
+        izz="23.554887"/>
     </inertial>
-    
+
     <visual>
+      <!-- remove any baked RPY here -->
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://virtual_shake_robot_pybullet/models/SP1_PBRmodel/final_sp1.obj" scale="1.0 1.0 1.0"/>
+        <mesh
+          filename="package://virtual_shake_robot_pybullet/models/SP1_PBRmodel/final_sp1_pca.obj"
+          scale="1 1 1"/>
       </geometry>
       <material name="grey">
         <color rgba="0.5 0.5 0.5 1"/>
       </material>
     </visual>
+
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://virtual_shake_robot_pybullet/models/SP1_PBRmodel/final_sp1.obj" scale="1.0 1.0 1.0"/>
+        <mesh
+          filename="package://virtual_shake_robot_pybullet/models/SP1_PBRmodel/final_sp1_pca.obj"
+          scale="1 1 1"/>
       </geometry>
     </collision>
+
   </link>
 </robot>

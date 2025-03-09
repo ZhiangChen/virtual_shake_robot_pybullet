@@ -16,4 +16,4 @@
 
       realtime_flag: false
       use_gui: true
-      enable_plotting: true
+      enable_plotting: false

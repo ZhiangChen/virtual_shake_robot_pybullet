@@ -191,6 +191,9 @@ src/example_2.py
 src/example_3.py
 src/example_4.py
 src/test.py
+src/vls.py
+src/orient.py
+src/dimensions.py
 
 data/sp1_*.yaml
 

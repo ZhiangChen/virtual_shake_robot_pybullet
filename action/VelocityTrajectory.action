@@ -1,0 +1,16 @@
+# VelocityTrajectory.action
+
+# Goal definition
+int32 robot_id
+float64[] velocity_list
+float64[] timestamp_list
+float64 response_wait_time
+
+---
+# Result definition
+bool success
+float64 final_position
+
+---
+# Feedback definition
+float64 current_velocity
