@@ -21,6 +21,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/ManageModel.srv"
   "action/RecordingAction.action"
   "action/LoadDispl.action"
+  "action/VelocityTrajectory.action"
   DEPENDENCIES builtin_interfaces std_msgs
 )
 
@@ -44,6 +45,7 @@ install(PROGRAMS
   src/utils/pbr_loader.py
   src/data_loader.py
   src/utils/script_generator.py
+  src/earthquake_parser.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

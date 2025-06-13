@@ -9,9 +9,13 @@ import time
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
+import random
+import pandas as pd
+from trimesh.transformations import quaternion_matrix, euler_from_matrix
+from scipy.spatial.transform import Rotation as R
 from rclpy.node import Node
 from rclpy.action import ActionServer
-from virtual_shake_robot_pybullet.action import TrajectoryAction, LoadPBR, LoadDispl
+from virtual_shake_robot_pybullet.action import TrajectoryAction, LoadPBR, LoadDispl,VelocityTrajectory
 from std_msgs.msg import Float64
 from std_msgs.msg import Header
 from geometry_msgs.msg import PoseStamped, Pose, Point, Quaternion
@@ -57,8 +61,16 @@ class SimulationNode(Node):
             'load_displ_action',
             execute_callback=self.execute_position_trajectory_callback
         )
+        self._velocity_trajectory_action_server = ActionServer(
+            self,
+            VelocityTrajectory,
+            'velocity_trajectory_action',
+            execute_callback=self.execute_velocity_trajectory_callback  # NEW callback below
+        )
+
 
         self.get_logger().info("Action server up and running!")
+        self.experiment_times = []
 
         # Desired state publisher
         self.desired_position_publisher = self.create_publisher(Float64, 'desired_position_topic', 10)
@@ -151,7 +163,8 @@ class SimulationNode(Node):
                 ('rock_structure_mesh.contactDamping', rclpy.Parameter.Type.DOUBLE),
                 ('rock_structure_mesh.contactStiffness', rclpy.Parameter.Type.DOUBLE),
                 ('rock_structure_mesh.rock_position', rclpy.Parameter.Type.DOUBLE_ARRAY),
-    
+                ('rock_structure_mesh.rock_orientation', rclpy.Parameter.Type.DOUBLE_ARRAY),
+            
             ])
 
         # Retrieve parameters from the parameter server
@@ -217,8 +230,8 @@ class SimulationNode(Node):
             'spinningFriction': self.get_parameter('rock_structure_mesh.spinningFriction').value,
             'contactDamping': self.get_parameter('rock_structure_mesh.contactDamping').value,
             'contactStiffness': self.get_parameter('rock_structure_mesh.contactStiffness').value,
-            'rock_position' : self.get_parameter('rock_structure_mesh.rock_position').value
-
+            'rock_position' : self.get_parameter('rock_structure_mesh.rock_position').value,
+            'rock_orientation' : self.get_parameter('rock_structure_mesh.rock_orientation').value
         }
 
         self.realtime_flag = self.get_parameter('simSettings.realtime_flag').value
@@ -234,7 +247,10 @@ class SimulationNode(Node):
         self.create_robot()
         self.declare_parameter('recording_folder_name', 'default_folder')
         self.recordings_folder = self.get_recording_folder_name()
-        
+        self.determism_seed = 42
+        random.seed(self.determism_seed)
+        np.random.seed(self.determism_seed)
+
 
     def server_connection(self, use_gui):
         """
@@ -277,6 +293,7 @@ class SimulationNode(Node):
                                     splitImpulsePenetrationThreshold=split_impulse_threshold,
                                     enableConeFriction=enable_cone_friction,
                                     deterministicOverlappingPairs=overlapping_pairs,
+                                    solverResidualThreshold=0,
                                     physicsClientId=self.client_id)        
 
         ##verfiy the physics parameters
@@ -304,15 +321,49 @@ class SimulationNode(Node):
             urdf_path = self.rock_structure_mesh_config['mesh']
             urdf_path = os.path.join(self.ros2_ws, 'src', 'virtual_shake_robot_pybullet', urdf_path)
             rock_position = self.rock_structure_mesh_config['rock_position']  
+            rock_orientation = self.rock_structure_mesh_config['rock_orientation']
+            
+
             model_id = p.loadURDF(urdf_path, basePosition=rock_position, physicsClientId=self.client_id)
+            if model_id >= 0:
+                # Reset to the desired orientation immediately after loading
+                p.resetBasePositionAndOrientation(
+                    model_id,
+                    rock_position,
+                    rock_orientation,
+                    physicsClientId=self.client_id
+                )
+
 
             if model_id < 0:
                 response.success = False
                 response.message = "Failed to load the rock model."
             else:
                 self.rock_id = model_id
+
                 response.success = True
                 response.message = f"Rock model loaded with ID: {self.rock_id}"
+                pos, actual_quat = p.getBasePositionAndOrientation(self.rock_id, physicsClientId=self.client_id)
+                self.get_logger().info(f"The Actual quaternion is : {actual_quat}")
+                roll, pitch, yaw = p.getEulerFromQuaternion(actual_quat)
+                q_int = np.array(rock_orientation)
+                q_act = np.array(actual_quat)
+                dot   = float(np.dot(q_int, q_act))
+                self.get_logger().info(f"Quaternion dot-product (±1 = exact match): {dot:.6f}")
+
+                # 2) PyBullet’s default Euler (for reference)
+                roll, pitch, yaw = p.getEulerFromQuaternion(actual_quat)
+                self.get_logger().info(f"-> spawned PBR RPY from PyBullet (rad): {[roll, pitch, yaw]}")
+
+                tf4 = quaternion_matrix(actual_quat)  # build 4×4 transformation matrix from quaternion [x, y, z, w]
+                tf4 = quaternion_matrix(actual_quat)       # build 4×4 from [x,y,z,w]
+                rpy_sxyz = euler_from_matrix(tf4, axes='sxyz')
+                rpy_deg  = np.degrees(rpy_sxyz)
+                self.get_logger().info(
+                    f"-> spawned PBR RPY via Trimesh sxyz (deg): {rpy_deg.tolist()}"
+                )
+                self.get_logger().info(f"-> spawned PBR RPY (rad): {[roll, pitch, yaw]}")
+                self.get_logger().info(f"-> spawned PBR Position: {pos}")
                 self.get_logger().info(response.message)  # Log the success message
 
                 restitution = self.rock_structure_mesh_config['restitution']
@@ -342,6 +393,7 @@ class SimulationNode(Node):
                 contactDamping = pbr_dynamics_info[8]
                 contactStiffness = pbr_dynamics_info[9]
 
+                self.get_logger().info(f"Initial rock dynamics: {pbr_dynamics_info}")
                 p.changeDynamics(
                 self.robot_id, 0,
                 restitution=restitution,
@@ -659,26 +711,154 @@ class SimulationNode(Node):
         recordings_folder = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet', 'recordings', folder_name)
         os.makedirs(recordings_folder, exist_ok=True)
         return recordings_folder
-
-
+    
+    def execute_velocity_trajectory_callback(self, goal_handle):
+        """
+        Executes a velocity-only trajectory using the VelocityTrajectory action.
+        Advances the simulation in small steps for each time interval from the provided timestamps,
+        records measured velocity and position, and then plots comparisons between:
+        - Desired vs. measured velocities
+        - Desired (integrated) vs. measured positions
+        """
+        self.get_logger().info("Executing velocity-only trajectory callback...")
         
+        desired_velocities = goal_handle.request.velocity_list
+        timestamps = goal_handle.request.timestamp_list
+        sim_dt = self.engine_settings['timestep']  # e.g., 0.001 s
+
+        measured_velocities = []  # Recorded measured velocities at each command interval
+        measured_positions = []   # Recorded measured positions
+        recorded_times = []       # Recorded timestamps matching each measurement
+
+        # Loop over each desired velocity command
+        for i in range(len(desired_velocities)):
+            # Set the velocity command
+            p.setJointMotorControl2(
+                bodyUniqueId=self.robot_id,
+                jointIndex=0,  # adjust if necessary
+                controlMode=p.VELOCITY_CONTROL,
+                targetVelocity=desired_velocities[i],
+                force=5e8,  # adjust force as needed
+                physicsClientId=self.client_id
+            )
+            
+            # Determine the duration for which to apply this command.
+            # For all but the last command, use the difference between consecutive timestamps.
+            if i < len(timestamps) - 1:
+                dt = timestamps[i+1] - timestamps[i]
+            else:
+                dt = sim_dt  # Fallback for the last command
+
+            # Compute how many simulation steps to perform to cover the interval dt.
+            num_steps = int(dt / sim_dt)
+            # Step the simulation repeatedly to cover the entire dt.
+            for _ in range(num_steps):
+                p.stepSimulation(physicsClientId=self.client_id)
+                if self.realtime_flag:
+                    # Sleep to maintain real-time pacing
+                    time.sleep(sim_dt)
+                
+
+            # After stepping, record the measured state.
+            joint_state = p.getJointState(self.robot_id, 0, physicsClientId=self.client_id)
+            measured_velocities.append(joint_state[1])  # Velocity at joint index 0
+            measured_positions.append(joint_state[0])   # Position at joint index 0
+            
+            # Use the end of the interval as the recorded time.
+            recorded_times.append(timestamps[i] + dt)
+
+        # (Optional) Trim arrays if there is any slight mismatch
+        min_len = min(len(recorded_times), len(desired_velocities))
+        recorded_times = recorded_times[:min_len]
+        desired_velocities = desired_velocities[:min_len]
+        measured_velocities = measured_velocities[:min_len]
+        
+        # Plot the velocity comparison.
+        if self.enable_plotting:
+            self.plot_velocity_comparison(recorded_times, desired_velocities, measured_velocities)
+        
+        # Compute desired positions by integrating the desired velocities using a simple Riemann sum.
+        # Assume initial desired position is 0.
+        desired_positions = [0.0]
+        for i in range(1, len(timestamps)):
+            dt = timestamps[i] - timestamps[i-1]
+            new_pos = desired_positions[-1] + desired_velocities[i-1] * dt
+            desired_positions.append(new_pos)
+        # Trim desired_positions to match recorded_times length if needed.
+        desired_positions = desired_positions[:min_len]
+        measured_positions = measured_positions[:min_len]
+        
+        # Plot the position comparison.
+        if self.enable_plotting:
+            self.plot_position_comparison(recorded_times, desired_positions, measured_positions)
+        
+        # Complete the action result.
+        goal_handle.succeed()
+        result = VelocityTrajectory.Result()
+        result.success = True
+        result.final_position = measured_positions[-1] if measured_positions else 0.0
+        return result
+
+    def plot_velocity_comparison(self, timestamps, desired_velocities, measured_velocities):
+        """
+        Plots the desired velocity versus the measured (pedestal) velocity.
+
+        Args:
+            timestamps (list): Time stamps corresponding to each command.
+            desired_velocities (list): Velocity values sent to the simulation.
+            measured_velocities (list): Velocity values measured from the pedestal.
+        """
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(12, 6))
+        plt.plot(timestamps, desired_velocities, 'r-', label="Desired Velocity")
+        plt.plot(timestamps, measured_velocities, 'b--', label="Measured Velocity")
+        plt.xlabel("Time (s)")
+        plt.ylabel("Velocity (m/s)")
+        plt.title("Comparison of Desired and Measured Pedestal Velocity")
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+    def plot_position_comparison(self, timestamps, desired_positions, measured_positions):
+        """
+        Plots the desired position (computed by integrating desired velocity) versus
+        the measured pedestal position.
+
+        Args:
+            timestamps (list): Time stamps corresponding to each measurement.
+            desired_positions (list): Computed desired positions.
+            measured_positions (list): Measured positions from the simulation.
+        """
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(12, 6))
+        plt.plot(timestamps, desired_positions, 'r-', label="Desired Position")
+        plt.plot(timestamps, measured_positions, 'b--', label="Measured Position")
+        plt.xlabel("Time (s)")
+        plt.ylabel("Position (m)")
+        plt.title("Comparison of Desired and Measured Pedestal Position")
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+
+
+
     def execute_position_trajectory_callback(self, goal_handle):
         """
         Executes the trajectory based on the positions and timestamps provided in the LoadDispl action goal.
-
-        Arguments:
-            goal_handle (LoadDispl.GoalHandle): The goal handle containing positions and timestamps.
-
-        Returns:
-            result (LoadDispl.Result): The result of the action, indicating success or failure.
+        After execution, it records the total time taken for the experiment and stores it in a CSV file.
         """
-
         self.logger.info("Received LoadDispl action goal...")
 
         positions = goal_handle.request.positions
         timestamps = goal_handle.request.timestamps
-        test_no = goal_handle.request.test_no
+        test_no = goal_handle.request.test_no  # Unique test number
 
+        if len(positions) != len(timestamps):
+            self.logger.error("Length of positions and timestamps must be equal.")
+            goal_handle.abort()
+            return LoadDispl.Result(success=False)
+        
         feedback_msg = LoadDispl.Feedback()
 
         # Initialize lists to store data for plotting and saving
@@ -689,7 +869,8 @@ class SimulationNode(Node):
 
         self.logger.info(f"Executing LoadDispl with {len(positions)} positions and {len(timestamps)} timestamps...")
 
-        start_time = time.time()
+        # Record the start time for the experiment
+        experiment_start_time = time.time()
 
         for i in range(len(positions)):
             iteration_start_time = time.time()  # Record the start time of this iteration
@@ -712,21 +893,24 @@ class SimulationNode(Node):
             joint_state = p.getJointState(self.robot_id, 0)
             actual_position = joint_state[0]
 
-            # Store positions for plotting and saving
+            # Store positions for later saving
             target_positions.append(current_position)
             actual_positions.append(actual_position)
 
             # Get the pose of the PBR model and save the pose information
             if self.rock_id is not None:
                 pbr_position, pbr_orientation = p.getBasePositionAndOrientation(self.rock_id, physicsClientId=self.client_id)
+            else:
+                pbr_position = [0, 0, 0]
+                pbr_orientation = [0, 0, 0, 1]
             
             pose_msg = PoseStamped()
             pose_msg.header.stamp = self.get_clock().now().to_msg()
             pose_msg.header.frame_id = "world"
             pose_msg.pose.position = Point(x=pbr_position[0], y=pbr_position[1], z=pbr_position[2])
-            pose_msg.pose.orientation = Quaternion(x=pbr_orientation[0], y=pbr_orientation[1], z=pbr_orientation[2], w=pbr_orientation[3])
+            pose_msg.pose.orientation = Quaternion(x=pbr_orientation[0], y=pbr_orientation[1], 
+                                                z=pbr_orientation[2], w=pbr_orientation[3])
             self.pbr_pose_publisher.publish(pose_msg)
-
 
             # Append data to simulation_data (to be saved later: timestamp, target position, actual position, PBR pose)
             simulation_data.append([
@@ -735,12 +919,12 @@ class SimulationNode(Node):
                 actual_position,
                 pbr_position[0], pbr_position[1], pbr_position[2],
                 pbr_orientation[0], pbr_orientation[1], pbr_orientation[2], pbr_orientation[3]
-
             ])
-        
 
-            # Publish the actual joint state
-            # self.position_publisher.publish(Float64(data=actual_position))
+            # Capture feedback
+            feedback_msg.current_position = current_position
+            feedback_msg.current_timestamp = timestamps[i]
+            goal_handle.publish_feedback(feedback_msg)
 
             # Calculate the time difference for the next step
             if i < len(timestamps) - 1:
@@ -755,54 +939,45 @@ class SimulationNode(Node):
             for _ in range(num_steps):
                 p.stepSimulation(physicsClientId=self.client_id)
 
-            # Ensure each loop iteration takes approximately time_step seconds
+            # Ensure each loop iteration takes approximately time_diff seconds
             iteration_end_time = time.time()
             elapsed_time = iteration_end_time - iteration_start_time
             sleep_time = time_diff - elapsed_time
-
             if self.realtime_flag and sleep_time > 0:
                 time.sleep(sleep_time)
 
-            # Capture feedback
-            feedback_msg.current_position = current_position
-            feedback_msg.current_timestamp = timestamps[i]
-            goal_handle.publish_feedback(feedback_msg)
+        # Record the end time and compute the total execution time for the experiment
+        experiment_end_time = time.time()
+        total_execution_time = experiment_end_time - experiment_start_time
+        self.get_logger().info(f"Total execution time for this experiment: {total_execution_time:.4f} seconds")
 
-    
+        # Store the experiment's execution time along with the test number in a CSV file
+        csv_file = os.path.join(self.recordings_folder, "experiment_times.csv")
+        current_experiment = pd.DataFrame({
+            "test_no": [test_no],
+            "execution_time": [total_execution_time]
+        })
+
+        if not os.path.exists(csv_file):
+            current_experiment.to_csv(csv_file, index=False)
+        else:
+            current_experiment.to_csv(csv_file, mode='a', header=False, index=False)
+
+        # Save simulation data to a numpy file as before
         full_namespace = self.get_namespace()
         sim_no = full_namespace.split('/')[1]
-
-        # Generate a unique file name with test_no and namespace
         file_name = f"trajectory_{sim_no}_test_{int(test_no)}.npy"
         file_path = os.path.join(self.recordings_folder, file_name)
-
-        # Save the simulation data to a numpy file (timestamps, target_positions, actual_positions, pbr_poses)
         self.get_logger().info(f"Length of the .npy file(before): {len(simulation_data)}")
         np.save(file_path, np.array(simulation_data))
         self.get_logger().info(f"Simulation data saved to {file_path}")
         del simulation_data
         gc.collect()
 
-        end_time = time.time()
-        self.logger.info(f"Total execution time: {end_time - start_time} seconds")
-
-        self.logger.info("LoadDispl action execution completed.")
-
-        target_positions.clear()
-        actual_positions.clear()
-        simulation_timestamps.clear()
-
-        # Optionally show the plot if plotting is enabled
-        if self.enable_plotting:
-            plt.show()
-        
-
         goal_handle.succeed()
         result = LoadDispl.Result()
         result.success = True
         return result
-
-
 
     def execute_pos_vel_trajectory_callback(self, goal_handle):
         """

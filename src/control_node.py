@@ -4,9 +4,11 @@ import pybullet as p
 import time
 import yaml
 import rclpy
+import random
+import pickle
 from rclpy.node import Node
 from rclpy.action import ActionServer, ActionClient
-from virtual_shake_robot_pybullet.action import TrajectoryAction, AF, RecordingAction, LoadDispl
+from virtual_shake_robot_pybullet.action import TrajectoryAction, AF, RecordingAction, LoadDispl, VelocityTrajectory
 from std_srvs.srv import Empty
 from math import pi
 import numpy as np
@@ -22,6 +24,8 @@ import os
 from ament_index_python.packages import get_package_share_directory
 import argparse
 from rclpy.parameter import Parameter
+from earthquake_parser import parse_all_earthquake_records
+
 
 class ControlNode(Node):
     def __init__(self):
@@ -37,7 +41,7 @@ class ControlNode(Node):
         """
         super().__init__('control_node')
         self.new_pose_received = False
-        self.enable_plotting = self.declare_parameter('enable_plotting', False).value
+        self.enable_plotting = self.declare_parameter('enable_plotting', True).value
         self.time_step = self.declare_parameter('engineSettings.timeStep', 0.001).value
         self.response_wait_time = self.declare_parameter('engineSettings.response_wait_time', 5.0).value
         self.loading_wait_time = self.declare_parameter('engineSettings.loading_wait_time', 5.0).value
@@ -47,6 +51,7 @@ class ControlNode(Node):
         self._trajectory_action_client = ActionClient(self, TrajectoryAction, 'trajectory_action')
         self._recording_action_client = ActionClient(self, RecordingAction, 'manage_recording')
         self._displacement_action_client = ActionClient(self, LoadDispl, 'load_displ_action')
+        self._velocity_trajectory_action_client = ActionClient(self, VelocityTrajectory, 'velocity_trajectory_action')
 
         # Publishers and Subscribers
         self.ready_publisher = self.create_publisher(Bool, 'control_node_ready', 10)
@@ -88,12 +93,22 @@ class ControlNode(Node):
         # Motion mode and test_no parameters
         self.motion_mode = self.declare_parameter('motion_mode', '').value
         self.test_no = self.declare_parameter('test_no', Parameter.Type.INTEGER, None).value
+        self.declare_parameter('test_number_range', '')
+        self.test_number_range = self.get_parameter('test_number_range').value
+
+        self.declare_parameter('earthquake_pkl_file',
+                                 '/home/akshay/ros2_ws/src/virtual_shake_robot_pybullet/src/earthquake_data.pkl')
+        self.pkl_file = self.get_parameter('earthquake_pkl_file').value
+
+        # Reference orientation for toppling detection
+        self.reference_orientation = None
+        self.toppling_threshold = 0.1  # radians
 
         # We only create the manage_model client here. We may or may not use it depending on the mode.
         self._manage_model_client = self.create_client(ManageModel, 'manage_model')
 
         # The following steps load YAML and DataLoader only if needed.
-        if self.motion_mode in ['single_recording', 'all_recordings']:
+        if self.motion_mode in ['single_recording', 'all_recordings', 'single_recording_range']:
             # Get the package share directory
             ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
             config_path = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet', 'config', 'data_path.yaml')
@@ -146,7 +161,147 @@ class ControlNode(Node):
             self.run_single_recording_experiment(self.test_no)
         elif self.motion_mode == 'all_recordings':
             self.run_all_recording_experiments()
+        elif self.motion_mode == 'single_recording_range':
+            if self.test_number_range is None:
+                self.get_logger().error("Test number range must be provided for single_recording_range mode.")
+                raise ValueError("Test number range must be provided for single_recording_range mode.")
+            self.run_single_recording_range(self.test_number_range)
+        elif self.motion_mode == 'earthquake_batch':
+            self.get_logger().info(f"Loading Earthquake records from pickle file: {self.pkl_file}")
+            try:
+                with open(self.pkl_file, 'rb') as f:
+                    self.all_data = pickle.load(f)
+                self.get_logger().info("Pickle file loaded successfully.")
+            except Exception as e:
+                self.get_logger().error(f"Error loading pickle file: {e}")
+                self.all_data = {}
+            self.run_earthquake_batch_velocity()
+
+    def run_earthquake_batch_velocity(self):
+        # Use the data loaded from the pickle file.
+        all_data = self.all_data
+        if not all_data:
+            self.get_logger().error("No earthquake data loaded from pickle!")
+            return
+
+        # Spawn the model once if not already spawned.
+        if self.rock_id is None:
+            self.spawn_initial_model()
         
+        # List to hold results...
+        results_list = []
+        
+        for top_folder, sub_dict in all_data.items():
+            self.get_logger().info(f"Top folder: {top_folder}")
+            for subfolder, file_dict in sub_dict.items():
+                self.get_logger().info(f"  Subfolder: {subfolder}")
+                for file_name, (timestamps, velocities) in file_dict.items():
+                    self.get_logger().info(f"    Processing file: {file_name} with {len(timestamps)} samples")
+                    start_time = time.time()
+                    self.get_logger().info(f"First 5 velocities: {velocities[:5]}")
+                    self.get_logger().info(f"First 5 timestamps: {timestamps[:5]}")
+                    result = self.send_velocity_trajectory_goal(velocities, timestamps)
+                    end_time = time.time()
+                    exec_time = end_time - start_time
+                    final_position = result.result.final_position if result is not None else None
+                    results_list.append((top_folder, subfolder, file_name, exec_time, final_position))
+                    rclpy.spin_once(self, timeout_sec=1.0)
+                    self.reset_model_postion_and_orientation()
+        
+        # Write results to CSV (unchanged)
+        ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
+        csv_file_path = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet', 'data', 'earthquake_batch_results.csv')
+        with open(csv_file_path, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(["TopFolder", "Subfolder", "FileName", "ExecutionTime", "FinalPosition"])
+            for row in results_list:
+                writer.writerow(row)
+        self.get_logger().info(f"Batch results saved to {csv_file_path}")
+
+    def run_single_recording_range(self, test_number_range):
+        """
+        Runs recording experiments for a range of test numbers dynamically found from the combined data,
+        handling pose updates and toppling status.
+
+        Args:
+            test_number_range (str): A string representing the range in the form "start-end" (e.g., "1-100").
+
+        Returns:
+            None
+        """
+        # Parse the input range string
+        try:
+            start, end = map(int, test_number_range.split('-'))
+        except Exception as e:
+            self.get_logger().error("Invalid test range format. Please use 'start-end' (e.g., '1-100').")
+            return
+
+        # Get the workspace src directory dynamically
+        ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
+        src_directory = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet', 'data')
+
+        # Define the file path using the simulation namespace
+        sim_no = self.get_namespace().replace('/', '')
+        csv_file_path = os.path.join(src_directory, f'toppling_status_{sim_no}.csv')
+        time_file_path = os.path.join(src_directory, f'exp_time_{sim_no}.csv')
+
+        self.get_logger().info(f"Saving the CSV file at: {csv_file_path}")
+        topple_status_array = []
+
+        # Get all available test numbers from the combined data
+        available_keys = sorted(self.combined_data.keys())
+        self.get_logger().info(f"Found {len(available_keys)} test numbers: {available_keys}")
+
+        # Filter the available keys to only those within the specified range
+        test_numbers_to_run = [tn for tn in available_keys if start <= tn <= end]
+        self.get_logger().info(f"Running tests in the range {start}-{end}: {test_numbers_to_run}")
+
+        exp_start_time = time.time()
+
+        for test_no in test_numbers_to_run:
+            self.get_logger().info(f"Starting experiment on Test No: {test_no}")
+
+            # Extract PGV, PGA, and PGV/PGA for the current test
+            if test_no in self.combined_data:
+                test_data = self.combined_data[test_no]
+                pgv_to_pga = test_data.get('PGV/PGA', None)
+                pga = test_data.get('Scaled PGA', None)
+
+                if pgv_to_pga is None or pga is None:
+                    self.get_logger().warning(f"Missing data for Test No: {test_no}. Skipping this test.")
+                    continue
+
+                self.get_logger().info(f"Started recording for Test No: {test_no} with PGA: {pga}, PGV/PGA: {pgv_to_pga}")
+            else:
+                self.get_logger().error(f"No data available for Test No: {test_no}. Skipping this test.")
+                continue
+
+            # Run the single recording experiment (assuming run_single_recording_experiment returns a boolean)
+            success = self.run_single_recording_experiment(test_no)
+
+            if success:
+                self.get_logger().info(f"Experiment on Test No: {test_no} displacement data sent successfully.")
+                # (Insert any additional processing for a successful run here)
+                # For example, update plots or record status
+                # ...
+            else:
+                self.get_logger().error(f"Experiment on Test No: {test_no} failed or was not completed.")
+
+            self.get_logger().info(f"Completed Test No: {test_no}. Moving to the next test.")
+            self.reset_model_postion_and_orientation()
+            self.rock_id = 2
+            rclpy.spin_once(self, timeout_sec=0.001)
+
+        # After finishing, log the experiment time and save results
+        exp_end_time = time.time()
+        total_experiment_time = exp_end_time - exp_start_time
+        self.get_logger().info(f"Total experiment time: {total_experiment_time:.2f} seconds")
+
+        with open(time_file_path, 'a', newline='') as log_file:
+            writer = csv.writer(log_file)
+            writer.writerow(['Total Time', total_experiment_time])
+
+            
         
     def run_single_recording_experiment(self, test_no):
         """
@@ -282,10 +437,15 @@ class ControlNode(Node):
         Returns:
             None
         """
-    
         self.latest_pose = msg.pose
         self.new_pose_received = True
         
+        # Store initial orientation if not already set
+        if self.reference_orientation is None and self.latest_pose is not None:
+            q = [self.latest_pose.orientation.w, self.latest_pose.orientation.x,
+                 self.latest_pose.orientation.y, self.latest_pose.orientation.z]
+            self.reference_orientation = euler.quat2euler(q)
+            self.get_logger().info(f"Set initial reference orientation: {np.degrees(self.reference_orientation)}")
 
     def sample_motion_param(self):
         """
@@ -315,12 +475,14 @@ class ControlNode(Node):
             None
         """
         # Get the workspace src directory dynamically
+       
         ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
         src_directory = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet', 'data')
 
         # Define the file path using the simulation namespace
         sim_no = self.get_namespace().replace('/', '')
         csv_file_path = os.path.join(src_directory, f'toppling_status_{sim_no}.csv')
+        time_file_path = os.path.join(src_directory, f'exp_time_{sim_no}.csv')
 
         self.get_logger().info(f"Saving the CSV file at: {csv_file_path}")
         topple_status_array = []
@@ -328,6 +490,7 @@ class ControlNode(Node):
         # Dynamically find all the test numbers in the combined data
         test_numbers = sorted(self.combined_data.keys())
         self.get_logger().info(f"Found {len(test_numbers)} test numbers: {test_numbers}")
+        exp_start_time = time.time()
 
         for test_no in test_numbers:
             self.get_logger().info(f"Starting experiment on Test No: {test_no}")
@@ -387,8 +550,15 @@ class ControlNode(Node):
         # After all tests, save toppling status to CSV
         self.save_toppling_status_to_csv(topple_status_array, csv_file_path)
 
+        experiment_end_time = time.time()
 
-  
+        total_experiment_time = experiment_end_time - exp_start_time
+
+        self.get_logger().info(f"the total experiment time is :{total_experiment_time:.2f} seconds")
+
+        with open(time_file_path, 'a', newline='') as log_file:
+            writer = csv.writer(log_file)
+            writer.writerow(['Total Time', total_experiment_time])
 
     def save_toppling_status_to_csv(self, topple_status_array,csv_file_path):
         """
@@ -516,7 +686,9 @@ class ControlNode(Node):
       
 
     def reset_model_postion_and_orientation(self):
-
+        # Reset reference orientation when respawning the model
+        self.reference_orientation = None
+        
         self.get_logger().info(f"Sending reset request to the simulation node")
 
         reset_request = ManageModel.Request()
@@ -649,7 +821,7 @@ class ControlNode(Node):
         spawn_request = ManageModel.Request()
         spawn_request.action = "spawn"
         spawn_future = self._manage_model_client.call_async(spawn_request)
-        rclpy.spin_until_future_complete(self, spawn_future)
+        rclpy.spin_until_future_complete(spawn_future)
         if not spawn_future.result().success:
             self.get_logger().error("Failed to spawn model")
             return
@@ -717,20 +889,34 @@ class ControlNode(Node):
         self.plot_trajectory(timestamps, positions, velocities)
 
         return positions, velocities, timestamps
-
+    
+   
     def check_Toppled(self, pose):
         """
-        Checks if the PBR has toppled based on the given pose.
-
+        Checks if the PBR has toppled by comparing to the initial orientation.
+        
         Args:
             pose (Pose): The pose of the PBR.
-
+        
         Returns:
             bool: True if the PBR has toppled, False otherwise.
         """
+        # If we don't have a reference orientation yet, the rock can't be toppled
+        if self.reference_orientation is None:
+            return False
+            
+        # Get current orientation
         q = [pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z]
-        r, p, y = euler.quat2euler(q)
-        return (abs(r) + abs(p)) >= 0.1
+        current_orientation = euler.quat2euler(q)
+        
+        # Calculate deviation from reference orientation
+        r_deviation = abs(current_orientation[0] - self.reference_orientation[0])
+        p_deviation = abs(current_orientation[1] - self.reference_orientation[1])
+        
+        # Use the same threshold, but applied to deviations
+        is_toppled = (r_deviation + p_deviation) >= self.toppling_threshold
+        
+        return is_toppled
 
     def logData(self, A, F, state):
         """
@@ -832,6 +1018,40 @@ class ControlNode(Node):
         else:
             self.get_logger().info("Plotting is disabled.")
 
+    def send_velocity_trajectory_goal(self, velocities, timestamps):
+        """
+        Constructs and sends a VelocityTrajectory goal to the simulation node.
+        Returns the result received from the simulation node.
+        """
+        if not self._velocity_trajectory_action_client.wait_for_server(timeout_sec=5.0):
+            self.get_logger().error("Velocity trajectory action server not available.")
+            return None
+
+        goal_msg = VelocityTrajectory.Goal()
+        goal_msg.robot_id = 1  # Adjust if necessary
+        goal_msg.velocity_list = velocities
+        goal_msg.timestamp_list = timestamps
+        goal_msg.response_wait_time = 1.0
+
+        self.get_logger().info(f"Sending velocity trajectory with {len(velocities)} points...")
+        send_goal_future = self._velocity_trajectory_action_client.send_goal_async(goal_msg)
+        rclpy.spin_until_future_complete(self, send_goal_future)
+        goal_handle = send_goal_future.result()
+        if not goal_handle.accepted:
+            self.get_logger().error("Velocity trajectory goal was rejected!")
+            return None
+
+        get_result_future = goal_handle.get_result_async()
+        rclpy.spin_until_future_complete(self, get_result_future)
+        result = get_result_future.result()
+        if result is not None and result.result.success:
+            self.get_logger().info("Velocity trajectory execution succeeded.")
+        else:
+            self.get_logger().error("Velocity trajectory execution failed.")
+        return result
+
+
+
     def send_trajectory_goal(self, positions, velocities, timestamps):
         """
         Sends a trajectory goal to the TrajectoryAction server.
@@ -897,7 +1117,8 @@ class ControlNode(Node):
             self.plot_trajectories(result.actual_positions, result.actual_velocities)
         else:
             self.get_logger().error("Trajectory action failed!")
-
+           
+       
     def generate_reset_trajectory(self, start_pose):
         """
         Generates a reset trajectory to bring the pedestal back to the base position.

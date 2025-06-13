@@ -48,10 +48,35 @@ class TopplingAnalysis:
             return None
         return np.load(file_path)
 
-    def check_toppled(self, orientation):
+    def check_toppled(self, orientation, reference_orientation=None):
+        """
+        Checks if the rock has toppled by comparing to a reference orientation.
+        If reference_orientation is None, it will use the zero orientation as reference.
+        
+        Args:
+            orientation: Current quaternion orientation [w, x, y, z]
+            reference_orientation: Optional reference quaternion [w, x, y, z]
+            
+        Returns:
+            bool: True if toppled, False otherwise
+        """
         w, x, y, z = orientation
         roll, pitch, _ = euler.quat2euler([w, x, y, z])
-        return (abs(roll) + abs(pitch)) >= 0.1
+        
+        if reference_orientation is not None:
+            # Use reference orientation
+            ref_w, ref_x, ref_y, ref_z = reference_orientation
+            ref_roll, ref_pitch, _ = euler.quat2euler([ref_w, ref_x, ref_y, ref_z])
+            
+            # Calculate deviation from reference
+            roll_deviation = abs(roll - ref_roll)
+            pitch_deviation = abs(pitch - ref_pitch)
+            
+            # Use the threshold on deviation
+            return (roll_deviation + pitch_deviation) >= 0.1
+        else:
+            # Use absolute values if no reference provided (original behavior)
+            return (abs(roll) + abs(pitch)) >= 0.1
 
     def analyze_all_simulations(self):
         metrics_list = []
@@ -76,8 +101,15 @@ class TopplingAnalysis:
                     continue
 
                 ground_truth_status = self.ground_truth_data.loc[test_no, 'Toppling Status']
+                
+                # Get the first frame's orientation as reference
+                first_orientation = npy_data[0, 6:10] if len(npy_data) > 0 else None
+                
+                # Use the last frame to check toppling status
                 last_orientation = npy_data[-1, 6:10]
-                toppled = self.check_toppled(last_orientation)
+                
+                # Check if toppled using reference orientation
+                toppled = self.check_toppled(last_orientation, reference_orientation=first_orientation)
                 predicted_status_value = 1 if toppled else 0
 
                 actual_status.append(ground_truth_status)
