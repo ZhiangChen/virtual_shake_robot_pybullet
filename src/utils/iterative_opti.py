@@ -310,11 +310,12 @@ def main_with_excel():
         'meshScale': [1.0, 1.0, 1.0],
         'mass': 353.802,
         'restitution': 0.3,
-        'lateralFriction': 0.5,
-        'spinningFriction': 0.1,
-        'contactDamping': 10000.0,
-        'contactStiffness': 1000000.0,
-        'rock_position': [0.0, 0.0, 2.78]
+        'lateralFriction': 0.7,
+        'spinningFriction': 0.5,
+        'contactDamping': 10000000.0,
+        'contactStiffness': 2600000000.0,
+        'rock_position': [0.0, 0.0, 2.78],
+        'rock_orientation': [0.8676640240119536, 0.06594471044608025, 0.4791004506761131, 0.11520935188391664]
     }
 
     # Define parameter ranges

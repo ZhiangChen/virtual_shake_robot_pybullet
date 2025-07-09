@@ -982,12 +982,7 @@ class SimulationNode(Node):
     def execute_pos_vel_trajectory_callback(self, goal_handle):
         """
         Executes the trajectory from the data received in the TrajectoryAction goal.
-
-        Arguments:
-            goal_handle (TrajectoryAction.GoalHandle): The goal handle containing positions, velocities, and timestamps.
-
-        Returns:
-            result (TrajectoryAction.Result): The result of the action, including the actual positions and velocities after execution.
+        Now also logs simulation data during the response_wait_time period at 100 Hz.
         """
         self.logger.info("Executing trajectory callback...")
 
@@ -1010,115 +1005,125 @@ class SimulationNode(Node):
             self.logger.error("Length of positions, velocities, and timestamps must be equal.")
             goal_handle.abort()
             return TrajectoryAction.Result(success=False)
-        
+
         self.get_logger().info(f"Length of the trajectory: {len(positions)}")
         time_step = self.engine_settings['timestep']
+        loop_start_time = time.time()
 
-        loop_start_time = time.time()  # Record the start time of the loop
-
+        # ====== Main control loop ======
         for i in range(len(timestamps)):
-            iteration_start_time = time.time()  # Record the start time of this iteration
+            iteration_start_time = time.time()
 
-            # Capture the desired positions and velocities for logging
             desired_positions.append(positions[i])
             desired_velocities.append(velocities[i])
 
             self.desired_position_publisher.publish(Float64(data=positions[i]))
             self.desired_velocity_publisher.publish(Float64(data=velocities[i]))
 
-            # Simulate the joint control
             p.setJointMotorControl2(
                 bodyUniqueId=robot_id,
                 jointIndex=0,
                 controlMode=p.POSITION_CONTROL,
                 targetPosition=positions[i],
                 targetVelocity=velocities[i],
-                force=5 * 10**8,
+                force=5e8,
                 maxVelocity=200,
                 physicsClientId=client_id
             )
 
             p.stepSimulation(physicsClientId=client_id)
 
-            # Capture the actual joint state
             joint_state = p.getJointState(robot_id, 0, physicsClientId=client_id)
             actual_position, actual_velocity = joint_state[0], joint_state[1]
 
-            # Get the pose of the PBR model and save the pose information
             if self.rock_id is not None:
                 pbr_position, pbr_orientation = p.getBasePositionAndOrientation(self.rock_id, physicsClientId=client_id)
+            else:
+                pbr_position = [0, 0, 0]
+                pbr_orientation = [0, 0, 0, 1]
 
+            pose_msg = PoseStamped()
+            pose_msg.header.stamp = self.get_clock().now().to_msg()
+            pose_msg.header.frame_id = "world"
+            pose_msg.pose.position = Point(*pbr_position)
+            pose_msg.pose.orientation = Quaternion(*pbr_orientation)
+            self.pbr_pose_publisher.publish(pose_msg)
 
-                # Create a PoseStamped message
-                pose_msg = PoseStamped()
-                pose_msg.header.stamp = self.get_clock().now().to_msg()
-                pose_msg.header.frame_id = "world"
-
-                pose_msg.pose.position = Point(x=pbr_position[0], y=pbr_position[1], z=pbr_position[2])
-                pose_msg.pose.orientation = Quaternion(x=pbr_orientation[0], y=pbr_orientation[1], z=pbr_orientation[2], w=pbr_orientation[3])
-
-                # Publish the PoseStamped message
-                self.pbr_pose_publisher.publish(pose_msg)
-
-            # Append data to simulation_data (to be saved later: timestamp, actual position, velocity, PBR pose)
             simulation_data.append([
                 timestamps[i],
                 actual_position,
                 actual_velocity,
-                pbr_position[0], pbr_position[1], pbr_position[2],
-                pbr_orientation[0], pbr_orientation[1], pbr_orientation[2], pbr_orientation[3]
+                *pbr_position,
+                *pbr_orientation
             ])
 
-            # Publish the actual position and velocity
             self.position_publisher.publish(Float64(data=actual_position))
             self.velocity_publisher.publish(Float64(data=actual_velocity))
 
-            # Feedback
             feedback_msg.current_position = actual_position
             feedback_msg.current_velocity = actual_velocity
             goal_handle.publish_feedback(feedback_msg)
-            
-            # Ensure each loop iteration takes approximately time_step seconds
-            iteration_end_time = time.time()
-            elapsed_time = iteration_end_time - iteration_start_time
-            sleep_time = time_step - elapsed_time
 
+            elapsed_time = time.time() - iteration_start_time
+            sleep_time = time_step - elapsed_time
             if self.realtime_flag and sleep_time > 0:
                 time.sleep(sleep_time)
 
-        loop_end_time = time.time()  # Record the end time of the loop
-        total_execution_time = loop_end_time - loop_start_time  # Calculate the total execution time
-        self.get_logger().info(f"Total execution time: {total_execution_time} seconds")
+        # ====== New: Logging during response_wait_time ======
+        self.get_logger().info(f"Logging during response_wait_time: {response_wait_time} seconds at 100 Hz.")
+        logging_freq = 100  # Hz
+        log_dt = 1.0 / logging_freq
+        end_wait_time = time.time() + response_wait_time
 
-        # After the loop, save the simulation data to a numpy file
+        while time.time() < end_wait_time:
+            current_time = time.time()
+            p.stepSimulation(physicsClientId=client_id)
+
+            joint_state = p.getJointState(robot_id, 0, physicsClientId=client_id)
+            actual_position, actual_velocity = joint_state[0], joint_state[1]
+
+            if self.rock_id is not None:
+                pbr_position, pbr_orientation = p.getBasePositionAndOrientation(self.rock_id, physicsClientId=client_id)
+            else:
+                pbr_position = [0, 0, 0]
+                pbr_orientation = [0, 0, 0, 1]
+
+            # Relative timestamp since start
+            timestamp = current_time - loop_start_time
+            simulation_data.append([
+                timestamp,
+                actual_position,
+                actual_velocity,
+                *pbr_position,
+                *pbr_orientation
+            ])
+
+            if self.realtime_flag:
+                time.sleep(log_dt)
+
+        # ====== Save data ======
+        loop_end_time = time.time()
+        total_execution_time = loop_end_time - loop_start_time
+        self.get_logger().info(f"Total execution time: {total_execution_time:.4f} seconds")
+
         ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
         recordings_folder = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet', 'recordings', 'recordings_grid_cosine')
         os.makedirs(recordings_folder, exist_ok=True)
 
-        
         file_name = f"trajectory_pos_vel_{amplitude}_{frequency}.npy"
         file_path = os.path.join(recordings_folder, file_name)
-
-        # Save the simulation data to a numpy file (timestamps, actual_positions, actual_velocities, pbr_poses)
-        self.get_logger().info(f"Length of the .npy file(before): {len(simulation_data)}")
+        self.get_logger().info(f"Length of simulation data: {len(simulation_data)}")
         np.save(file_path, np.array(simulation_data))
         self.get_logger().info(f"Simulation data saved to {file_path}")
         del simulation_data
         gc.collect()
-
-        # Wait for the specified wait time after the trajectory execution
-        self.get_logger().info(f"Waiting for {response_wait_time} seconds after trajectory completion.")
-        end_wait_time = time.time() + response_wait_time
-        while time.time() < end_wait_time:
-            p.stepSimulation(physicsClientId=client_id)
-            if self.realtime_flag:
-                time.sleep(time_step)
 
         self.get_logger().info("Trajectory execution completed successfully.")
         goal_handle.succeed()
         result = TrajectoryAction.Result()
         result.success = True
         return result
+
 
 
 
