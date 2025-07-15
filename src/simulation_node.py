@@ -713,91 +713,72 @@ class SimulationNode(Node):
         return recordings_folder
     
     def execute_velocity_trajectory_callback(self, goal_handle):
-        """
-        Executes a velocity-only trajectory using the VelocityTrajectory action.
-        Advances the simulation in small steps for each time interval from the provided timestamps,
-        records measured velocity and position, and then plots comparisons between:
-        - Desired vs. measured velocities
-        - Desired (integrated) vs. measured positions
-        """
+
         self.get_logger().info("Executing velocity-only trajectory callback...")
-        
+
         desired_velocities = goal_handle.request.velocity_list
         timestamps = goal_handle.request.timestamp_list
-        sim_dt = self.engine_settings['timestep']  # e.g., 0.001 s
+        sim_dt = self.engine_settings['timestep']
+        response_wait_time = 2.0  # You can make this a parameter or goal input
 
-        measured_velocities = []  # Recorded measured velocities at each command interval
-        measured_positions = []   # Recorded measured positions
-        recorded_times = []       # Recorded timestamps matching each measurement
+        measured_velocities = []
+        measured_positions = []
+        recorded_times = []
 
-        # Loop over each desired velocity command
         for i in range(len(desired_velocities)):
-            # Set the velocity command
             p.setJointMotorControl2(
                 bodyUniqueId=self.robot_id,
-                jointIndex=0,  # adjust if necessary
+                jointIndex=0,
                 controlMode=p.VELOCITY_CONTROL,
                 targetVelocity=desired_velocities[i],
-                force=5e8,  # adjust force as needed
+                force=5e8,
                 physicsClientId=self.client_id
             )
-            
-            # Determine the duration for which to apply this command.
-            # For all but the last command, use the difference between consecutive timestamps.
-            if i < len(timestamps) - 1:
-                dt = timestamps[i+1] - timestamps[i]
-            else:
-                dt = sim_dt  # Fallback for the last command
 
-            # Compute how many simulation steps to perform to cover the interval dt.
-            num_steps = int(dt / sim_dt)
-            # Step the simulation repeatedly to cover the entire dt.
-            for _ in range(num_steps):
+            dt = timestamps[i+1] - timestamps[i] if i < len(timestamps) - 1 else sim_dt
+            for _ in range(int(dt / sim_dt)):
                 p.stepSimulation(physicsClientId=self.client_id)
                 if self.realtime_flag:
-                    # Sleep to maintain real-time pacing
                     time.sleep(sim_dt)
-                
 
-            # After stepping, record the measured state.
             joint_state = p.getJointState(self.robot_id, 0, physicsClientId=self.client_id)
-            measured_velocities.append(joint_state[1])  # Velocity at joint index 0
-            measured_positions.append(joint_state[0])   # Position at joint index 0
-            
-            # Use the end of the interval as the recorded time.
+            measured_velocities.append(joint_state[1])
+            measured_positions.append(joint_state[0])
             recorded_times.append(timestamps[i] + dt)
 
-        # (Optional) Trim arrays if there is any slight mismatch
-        min_len = min(len(recorded_times), len(desired_velocities))
+        # Post-trajectory logging
+        self.get_logger().info(f"Logging post-velocity for {response_wait_time} seconds at 100Hz...")
+        log_dt = 1.0 / 100
+        post_log_start = time.time()
+        while time.time() < post_log_start + response_wait_time:
+            joint_state = p.getJointState(self.robot_id, 0, physicsClientId=self.client_id)
+            measured_velocities.append(joint_state[1])
+            measured_positions.append(joint_state[0])
+            recorded_times.append(time.time() - post_log_start)
+            if self.realtime_flag:
+                time.sleep(log_dt)
+
+        # Trim lengths
+        min_len = min(len(recorded_times), len(measured_velocities))
         recorded_times = recorded_times[:min_len]
-        desired_velocities = desired_velocities[:min_len]
         measured_velocities = measured_velocities[:min_len]
-        
-        # Plot the velocity comparison.
-        if self.enable_plotting:
-            self.plot_velocity_comparison(recorded_times, desired_velocities, measured_velocities)
-        
-        # Compute desired positions by integrating the desired velocities using a simple Riemann sum.
-        # Assume initial desired position is 0.
-        desired_positions = [0.0]
-        for i in range(1, len(timestamps)):
-            dt = timestamps[i] - timestamps[i-1]
-            new_pos = desired_positions[-1] + desired_velocities[i-1] * dt
-            desired_positions.append(new_pos)
-        # Trim desired_positions to match recorded_times length if needed.
-        desired_positions = desired_positions[:min_len]
         measured_positions = measured_positions[:min_len]
-        
-        # Plot the position comparison.
+
+        # Plotting
         if self.enable_plotting:
-            self.plot_position_comparison(recorded_times, desired_positions, measured_positions)
-        
-        # Complete the action result.
+            self.plot_velocity_comparison(recorded_times, desired_velocities[:min_len], measured_velocities)
+            desired_positions = [0.0]
+            for i in range(1, len(timestamps)):
+                dt = timestamps[i] - timestamps[i - 1]
+                desired_positions.append(desired_positions[-1] + desired_velocities[i - 1] * dt)
+            self.plot_position_comparison(recorded_times, desired_positions[:min_len], measured_positions)
+
         goal_handle.succeed()
         result = VelocityTrajectory.Result()
         result.success = True
         result.final_position = measured_positions[-1] if measured_positions else 0.0
         return result
+
 
     def plot_velocity_comparison(self, timestamps, desired_velocities, measured_velocities):
         """
@@ -844,140 +825,123 @@ class SimulationNode(Node):
 
 
     def execute_position_trajectory_callback(self, goal_handle):
-        """
-        Executes the trajectory based on the positions and timestamps provided in the LoadDispl action goal.
-        After execution, it records the total time taken for the experiment and stores it in a CSV file.
-        """
+        
         self.logger.info("Received LoadDispl action goal...")
 
         positions = goal_handle.request.positions
         timestamps = goal_handle.request.timestamps
-        test_no = goal_handle.request.test_no  # Unique test number
+        test_no = goal_handle.request.test_no
 
         if len(positions) != len(timestamps):
             self.logger.error("Length of positions and timestamps must be equal.")
             goal_handle.abort()
             return LoadDispl.Result(success=False)
-        
+
         feedback_msg = LoadDispl.Feedback()
-
-        # Initialize lists to store data for plotting and saving
-        target_positions = []
-        actual_positions = []
-        simulation_timestamps = []
-        simulation_data = []  # This will contain all the relevant data
-
-        self.logger.info(f"Executing LoadDispl with {len(positions)} positions and {len(timestamps)} timestamps...")
-
-        # Record the start time for the experiment
+        simulation_data = []
+        time_step = self.engine_settings['timestep']
         experiment_start_time = time.time()
 
         for i in range(len(positions)):
-            iteration_start_time = time.time()  # Record the start time of this iteration
-
+            iteration_start_time = time.time()
             current_position = positions[i]
-            simulation_timestamps.append(timestamps[i])
 
-            # Simulate the joint control based on the position
             p.setJointMotorControl2(
                 bodyUniqueId=self.robot_id,
                 jointIndex=0,
                 controlMode=p.POSITION_CONTROL,
                 targetPosition=current_position,
-                force=5 * 10**8,
+                force=5e8,
                 maxVelocity=200,
                 physicsClientId=self.client_id
             )
 
-            # Get the actual joint state after the step
             joint_state = p.getJointState(self.robot_id, 0)
             actual_position = joint_state[0]
 
-            # Store positions for later saving
-            target_positions.append(current_position)
-            actual_positions.append(actual_position)
-
-            # Get the pose of the PBR model and save the pose information
             if self.rock_id is not None:
                 pbr_position, pbr_orientation = p.getBasePositionAndOrientation(self.rock_id, physicsClientId=self.client_id)
             else:
                 pbr_position = [0, 0, 0]
                 pbr_orientation = [0, 0, 0, 1]
-            
+
             pose_msg = PoseStamped()
             pose_msg.header.stamp = self.get_clock().now().to_msg()
             pose_msg.header.frame_id = "world"
-            pose_msg.pose.position = Point(x=pbr_position[0], y=pbr_position[1], z=pbr_position[2])
-            pose_msg.pose.orientation = Quaternion(x=pbr_orientation[0], y=pbr_orientation[1], 
-                                                z=pbr_orientation[2], w=pbr_orientation[3])
+            pose_msg.pose.position = Point(*pbr_position)
+            pose_msg.pose.orientation = Quaternion(*pbr_orientation)
             self.pbr_pose_publisher.publish(pose_msg)
 
-            # Append data to simulation_data (to be saved later: timestamp, target position, actual position, PBR pose)
             simulation_data.append([
                 timestamps[i],
                 current_position,
                 actual_position,
-                pbr_position[0], pbr_position[1], pbr_position[2],
-                pbr_orientation[0], pbr_orientation[1], pbr_orientation[2], pbr_orientation[3]
+                *pbr_position,
+                *pbr_orientation
             ])
 
-            # Capture feedback
             feedback_msg.current_position = current_position
             feedback_msg.current_timestamp = timestamps[i]
             goal_handle.publish_feedback(feedback_msg)
 
-            # Calculate the time difference for the next step
             if i < len(timestamps) - 1:
-                time_diff = float(timestamps[i + 1]) - float(timestamps[i])
-                if time_diff <= 0:
-                    time_diff = self.engine_settings['timestep']
+                time_diff = max(float(timestamps[i+1] - timestamps[i]), time_step)
             else:
-                time_diff = self.engine_settings['timestep']
+                time_diff = time_step
 
-            # Step the simulation forward by the calculated time difference
-            num_steps = int(time_diff / self.engine_settings['timestep'])
+            num_steps = int(time_diff / time_step)
             for _ in range(num_steps):
                 p.stepSimulation(physicsClientId=self.client_id)
 
-            # Ensure each loop iteration takes approximately time_diff seconds
-            iteration_end_time = time.time()
-            elapsed_time = iteration_end_time - iteration_start_time
-            sleep_time = time_diff - elapsed_time
-            if self.realtime_flag and sleep_time > 0:
-                time.sleep(sleep_time)
+            elapsed_time = time.time() - iteration_start_time
+            if self.realtime_flag and time_diff - elapsed_time > 0:
+                time.sleep(time_diff - elapsed_time)
 
-        # Record the end time and compute the total execution time for the experiment
+        # Log after motion ends
+        response_wait_time = 2.0  # or pull from goal or parameter
+        self.get_logger().info(f"Logging post-motion for {response_wait_time} seconds at 100Hz...")
+        log_dt = 1.0 / 100
+        end_time = time.time() + response_wait_time
+        while time.time() < end_time:
+            joint_state = p.getJointState(self.robot_id, 0)
+            actual_position = joint_state[0]
+            actual_velocity = joint_state[1]
+
+            if self.rock_id is not None:
+                pbr_position, pbr_orientation = p.getBasePositionAndOrientation(self.rock_id, physicsClientId=self.client_id)
+            else:
+                pbr_position = [0, 0, 0]
+                pbr_orientation = [0, 0, 0, 1]
+
+            simulation_data.append([
+                time.time() - experiment_start_time,
+                None,
+                actual_position,
+                *pbr_position,
+                *pbr_orientation
+            ])
+
+            if self.realtime_flag:
+                time.sleep(log_dt)
+
         experiment_end_time = time.time()
-        total_execution_time = experiment_end_time - experiment_start_time
-        self.get_logger().info(f"Total execution time for this experiment: {total_execution_time:.4f} seconds")
+        total_time = experiment_end_time - experiment_start_time
+        self.get_logger().info(f"Total execution time: {total_time:.4f} seconds")
 
-        # Store the experiment's execution time along with the test number in a CSV file
-        csv_file = os.path.join(self.recordings_folder, "experiment_times.csv")
-        current_experiment = pd.DataFrame({
-            "test_no": [test_no],
-            "execution_time": [total_execution_time]
-        })
-
-        if not os.path.exists(csv_file):
-            current_experiment.to_csv(csv_file, index=False)
-        else:
-            current_experiment.to_csv(csv_file, mode='a', header=False, index=False)
-
-        # Save simulation data to a numpy file as before
-        full_namespace = self.get_namespace()
-        sim_no = full_namespace.split('/')[1]
-        file_name = f"trajectory_{sim_no}_test_{int(test_no)}.npy"
-        file_path = os.path.join(self.recordings_folder, file_name)
-        self.get_logger().info(f"Length of the .npy file(before): {len(simulation_data)}")
+        file_path = os.path.join(self.recordings_folder, f"trajectory_{self.get_namespace().split('/')[1]}_test_{int(test_no)}.npy")
         np.save(file_path, np.array(simulation_data))
-        self.get_logger().info(f"Simulation data saved to {file_path}")
+        self.get_logger().info(f"Data saved to {file_path}")
+
+        pd.DataFrame({"test_no": [test_no], "execution_time": [total_time]}).to_csv(
+            os.path.join(self.recordings_folder, "experiment_times.csv"),
+            mode='a', header=not os.path.exists(file_path), index=False
+        )
+
         del simulation_data
         gc.collect()
-
         goal_handle.succeed()
-        result = LoadDispl.Result()
-        result.success = True
-        return result
+        return LoadDispl.Result(success=True)
+
 
     def execute_pos_vel_trajectory_callback(self, goal_handle):
         """
