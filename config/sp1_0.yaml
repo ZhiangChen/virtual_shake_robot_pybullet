@@ -9,5 +9,5 @@
       spinningFriction: 0.1
       contactDamping: 10000.0
       contactStiffness: 1000000.0
-      rock_position: [0.0, -2.5, 2.78]
+      rock_position: [0.0, 0.0, 2.78]
       rock_orientation: [0.8676640240119536, 0.06594471044608025, 0.4791004506761131, 0.11520935188391664]
