@@ -96,8 +96,11 @@ class ControlNode(Node):
         self.declare_parameter('test_number_range', '')
         self.test_number_range = self.get_parameter('test_number_range').value
 
-        self.declare_parameter('earthquake_pkl_file',
-                                 '/home/akshay/ros2_ws/src/virtual_shake_robot_pybullet/src/earthquake_data.pkl')
+
+        ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
+        pkl_file_path = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet', 'src', 'earthquake_data.pkl')
+
+        self.declare_parameter('earthquake_pkl_file', pkl_file_path,)
         self.pkl_file = self.get_parameter('earthquake_pkl_file').value
 
         # Reference orientation for toppling detection
@@ -106,6 +109,10 @@ class ControlNode(Node):
 
         # We only create the manage_model client here. We may or may not use it depending on the mode.
         self._manage_model_client = self.create_client(ManageModel, 'manage_model')
+        
+        # ros info motion mode
+        self.get_logger().info(f"Motion mode set to: {self.motion_mode}")
+        self.get_logger().info(f"test_no: {self.test_no}")
 
         # The following steps load YAML and DataLoader only if needed.
         if self.motion_mode in ['single_recording', 'all_recordings', 'single_recording_range']:
