@@ -14,17 +14,27 @@ def generate_launch_description():
         default_value='',
         description='Motion mode for the control node: grid_cosine, single_recording, all_recordings'
     )
+
+    test_no_arg = DeclareLaunchArgument(
+        'test_no',
+        default_value='0',
+        description='Test number'
+    )
+
     test_number_range_arg = DeclareLaunchArgument(
         'test_number_range',
         default_value='',
         description='Range of test numbers for single_recording_range mode (e.g., "1-100")'
     )
 
+    ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
+
     # Paths to configuration files
-    physics_engine_parameters_path = os.path.join('/home/akshay/ros2_ws/src/virtual_shake_robot_pybullet/config', 'physics_engine_parameters.yaml')
-    physics_parameters_path = os.path.join('/home/akshay/ros2_ws/src/virtual_shake_robot_pybullet/config', 'physics_parameters.yaml')
-    vsr_structure_path = os.path.join('/home/akshay/ros2_ws/src/virtual_shake_robot_pybullet/config', 'vsr_structure_box.yaml')
-    pbr_structure_path = os.path.join('/home/akshay/ros2_ws/src/virtual_shake_robot_pybullet/config', 'pbr_box.yaml')
+    physics_engine_parameters_path = os.path.join(ros2_ws, 'src/virtual_shake_robot_pybullet/config', 'physics_engine_parameters.yaml')
+    physics_parameters_path = os.path.join(ros2_ws, 'src/virtual_shake_robot_pybullet/config', 'physics_parameters.yaml')
+    vsr_structure_path = os.path.join(ros2_ws, 'src/virtual_shake_robot_pybullet/config', 'vsr_structure_box.yaml')
+    pbr_structure_box_path = os.path.join(ros2_ws, 'src/virtual_shake_robot_pybullet/config', 'pbr_box.yaml')
+    pbr_structure_mesh_path = os.path.join(ros2_ws, 'src/virtual_shake_robot_pybullet/config', 'sp1.yaml')
 
     DeclareLaunchArgument('test_number_range', default_value='')
 
@@ -40,9 +50,9 @@ def generate_launch_description():
             physics_engine_parameters_path,
             physics_parameters_path,
             vsr_structure_path,
-            pbr_structure_path,
-            '/home/akshay/ros2_ws/src/virtual_shake_robot_pybullet/config/sp1.yaml',
-            {'recording_folder_name': LaunchConfiguration('recording_folder_name')}
+            pbr_structure_box_path,
+            pbr_structure_mesh_path,
+            #{'recording_folder_name': LaunchConfiguration('recording_folder_name')}
         ]
     )
 
@@ -55,6 +65,7 @@ def generate_launch_description():
         output='screen',
         parameters=[
             {'motion_mode': LaunchConfiguration('motion_mode')},
+            {'test_no': LaunchConfiguration('test_no')},
             {'test_number_range': LaunchConfiguration('test_number_range')}
         ]
     )

@@ -25,6 +25,20 @@ from std_srvs.srv import SetBool
 from virtual_shake_robot_pybullet.srv import ManageModel
 from memory_profiler import profile
 
+def get_param_or_default(node, name, default_value):
+    # If not declared, declare it
+    if not node.has_parameter(name):
+        node.declare_parameter(name, default_value)
+        return default_value
+
+    # If declared, try to get the value
+    try:
+        return node.get_parameter(name).value
+    except rclpy.exceptions.ParameterUninitializedException:
+        return default_value
+
+
+
 class SimulationNode(Node):
 
     """
@@ -231,8 +245,11 @@ class SimulationNode(Node):
             'contactDamping': self.get_parameter('rock_structure_mesh.contactDamping').value,
             'contactStiffness': self.get_parameter('rock_structure_mesh.contactStiffness').value,
             'rock_position' : self.get_parameter('rock_structure_mesh.rock_position').value,
-            'rock_orientation' : self.get_parameter('rock_structure_mesh.rock_orientation').value
+            'rock_orientation' : get_param_or_default(self, 'rock_structure_mesh.rock_orientation', [0.0, 0.0, 0.0, 1.0]),
         }
+
+        # logging the mesh value
+        self.get_logger().info(f"Rock mesh path: {self.rock_structure_mesh_config['mesh']}")
 
         self.realtime_flag = self.get_parameter('simSettings.realtime_flag').value
         self.use_gui = self.get_parameter('simSettings.use_gui').value
@@ -868,8 +885,14 @@ class SimulationNode(Node):
             pose_msg = PoseStamped()
             pose_msg.header.stamp = self.get_clock().now().to_msg()
             pose_msg.header.frame_id = "world"
-            pose_msg.pose.position = Point(*pbr_position)
-            pose_msg.pose.orientation = Quaternion(*pbr_orientation)
+            pose_msg.pose.position.x = pbr_position[0]
+            pose_msg.pose.position.y = pbr_position[1]
+            pose_msg.pose.position.z = pbr_position[2]
+
+            pose_msg.pose.orientation.x = pbr_orientation[0]
+            pose_msg.pose.orientation.y = pbr_orientation[1]
+            pose_msg.pose.orientation.z = pbr_orientation[2]
+            pose_msg.pose.orientation.w = pbr_orientation[3]
             self.pbr_pose_publisher.publish(pose_msg)
 
             simulation_data.append([
@@ -900,9 +923,11 @@ class SimulationNode(Node):
         # Log after motion ends
         response_wait_time = 2.0  # or pull from goal or parameter
         self.get_logger().info(f"Logging post-motion for {response_wait_time} seconds at 100Hz...")
-        log_dt = 1.0 / 100
+        log_dt = time_step
         end_time = time.time() + response_wait_time
-        while time.time() < end_time:
+
+        wait_time_step = int(response_wait_time / log_dt)
+        for i in range(wait_time_step):
             joint_state = p.getJointState(self.robot_id, 0)
             actual_position = joint_state[0]
             actual_velocity = joint_state[1]
@@ -914,7 +939,7 @@ class SimulationNode(Node):
                 pbr_orientation = [0, 0, 0, 1]
 
             simulation_data.append([
-                time.time() - experiment_start_time,
+                timestamps[-1] + i * log_dt,
                 None,
                 actual_position,
                 *pbr_position,
@@ -965,6 +990,7 @@ class SimulationNode(Node):
         frequency = goal_handle.request.frequency
         feedback_msg = TrajectoryAction.Feedback()
 
+
         if not (len(positions) == len(velocities) == len(timestamps)):
             self.logger.error("Length of positions, velocities, and timestamps must be equal.")
             goal_handle.abort()
@@ -1009,8 +1035,15 @@ class SimulationNode(Node):
             pose_msg = PoseStamped()
             pose_msg.header.stamp = self.get_clock().now().to_msg()
             pose_msg.header.frame_id = "world"
-            pose_msg.pose.position = Point(*pbr_position)
-            pose_msg.pose.orientation = Quaternion(*pbr_orientation)
+            pose_msg.pose.position.x = pbr_position[0]
+            pose_msg.pose.position.y = pbr_position[1]
+            pose_msg.pose.position.z = pbr_position[2]
+
+            pose_msg.pose.orientation.x = pbr_orientation[0]
+            pose_msg.pose.orientation.y = pbr_orientation[1]
+            pose_msg.pose.orientation.z = pbr_orientation[2]
+            pose_msg.pose.orientation.w = pbr_orientation[3]
+
             self.pbr_pose_publisher.publish(pose_msg)
 
             simulation_data.append([
@@ -1034,13 +1067,16 @@ class SimulationNode(Node):
                 time.sleep(sleep_time)
 
         # ====== New: Logging during response_wait_time ======
-        self.get_logger().info(f"Logging during response_wait_time: {response_wait_time} seconds at 100 Hz.")
-        logging_freq = 100  # Hz
-        log_dt = 1.0 / logging_freq
-        end_wait_time = time.time() + response_wait_time
+        logging_freq = 1.0 / time_step
+        log_dt = time_step
+        wait_time_step = int(response_wait_time * logging_freq)
 
-        while time.time() < end_wait_time:
-            current_time = time.time()
+        # logging wait time step
+        self.get_logger().info(f"Logging for {wait_time_step} steps at {log_dt:.4f} seconds each.")
+        self.get_logger().info(f"Logging during response_wait_time: {response_wait_time} seconds at {logging_freq} Hz.")
+
+        for i in range(wait_time_step):
+            t1 = time.time()
             p.stepSimulation(physicsClientId=client_id)
 
             joint_state = p.getJointState(robot_id, 0, physicsClientId=client_id)
@@ -1053,22 +1089,21 @@ class SimulationNode(Node):
                 pbr_orientation = [0, 0, 0, 1]
 
             # Relative timestamp since start
-            timestamp = current_time - loop_start_time
             simulation_data.append([
-                timestamp,
+                timestamps[-1] + i * log_dt,
                 actual_position,
                 actual_velocity,
                 *pbr_position,
                 *pbr_orientation
             ])
+            t2 = time.time()
 
             if self.realtime_flag:
-                time.sleep(log_dt)
+                sleep_time = log_dt - (t2 - t1)
+                if sleep_time > 0:
+                    time.sleep(log_dt)
 
         # ====== Save data ======
-        loop_end_time = time.time()
-        total_execution_time = loop_end_time - loop_start_time
-        self.get_logger().info(f"Total execution time: {total_execution_time:.4f} seconds")
 
         ros2_ws = os.getenv('ROS2_WS', default=os.path.expanduser('~/ros2_ws'))
         recordings_folder = os.path.join(ros2_ws, 'src', 'virtual_shake_robot_pybullet', 'recordings', 'recordings_grid_cosine')
